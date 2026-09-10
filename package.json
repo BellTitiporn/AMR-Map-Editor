@@ -1,0 +1,33 @@
+{
+  "name": "amr-map-editor",
+  "private": true,
+  "version": "0.6.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "zustand": "latest",
+    "lucide-react": "latest",
+    "zod": "latest",
+    "react-hook-form": "latest",
+    "konva": "latest",
+    "react-konva": "latest",
+    "yaml": "^2.8.1",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "vitest": "latest"
+  }
+}

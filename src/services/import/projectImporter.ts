@@ -1,0 +1,2 @@
+import { migrateProject } from '../../schemas/projectSchema';import { readFileAsText } from '../../utils/files';
+export async function importProjectFile(file:File){let value:unknown;try{value=JSON.parse(await readFileAsText(file))}catch(e){throw new Error(`Failed to parse project JSON: ${e instanceof Error?e.message:String(e)}`)}try{return migrateProject(value)}catch(e){throw new Error(`Invalid project file: ${e instanceof Error?e.message:String(e)}`)}}

@@ -1,0 +1,5 @@
+import type { AMRMapProjectFile } from '../../models';
+const DB='amr-map-editor',STORE='projects';
+function openDb():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{const req=indexedDB.open(DB,1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(STORE))req.result.createObjectStore(STORE,{keyPath:'project.id'})};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error??new Error('Failed to open IndexedDB'))})}
+export async function saveProjectIndexedDb(file:AMRMapProjectFile){const db=await openDb();await new Promise<void>((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(file);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error??new Error('Failed to save project'))});db.close()}
+export async function loadProjectIndexedDb(id:string){const db=await openDb();const value=await new Promise<AMRMapProjectFile|undefined>((resolve,reject)=>{const req=db.transaction(STORE).objectStore(STORE).get(id);req.onsuccess=()=>resolve(req.result as AMRMapProjectFile|undefined);req.onerror=()=>reject(req.error)});db.close();return value}
