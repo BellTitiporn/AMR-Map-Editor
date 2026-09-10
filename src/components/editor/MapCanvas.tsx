@@ -80,7 +80,7 @@ export function MapCanvas() {
     try {
       p.commit();
       const points = brushPolygon.map(q => worldToPixel(q.x, q.y, p.metadata));
-      p.updateMapImage(await paintOccupancyShape(p.image, p.metadata, { shape: 'polygon', points }, 'obstacle'));
+      p.updateMapImage(await paintOccupancyShape(p.image, p.metadata, { shape: 'polygon', points }, 'obstacle', e.brushColor));
       setBrushPolygon([]);
     } finally {
       paintBusy.current = false;
@@ -154,7 +154,7 @@ export function MapCanvas() {
     paintBusy.current = true;
     try {
       const w = pointerWorld(evt), px = worldToPixel(w.x, w.y, p.metadata);
-      p.updateMapImage(await paintOccupancy(p.image, p.metadata, px.x, px.y, e.tool === 'eraser' ? 'erase' : 'obstacle', e.brushSize));
+      p.updateMapImage(await paintOccupancy(p.image, p.metadata, px.x, px.y, e.tool === 'eraser' ? 'erase' : 'obstacle', e.brushSize, e.brushColor));
     } finally { paintBusy.current = false; }
   };
 
@@ -167,7 +167,7 @@ export function MapCanvas() {
       const command = draft.kind === 'line'
         ? { shape: 'line' as const, from, to, size: e.brushSize }
         : { shape: 'rectangle' as const, from, to };
-      p.updateMapImage(await paintOccupancyShape(p.image, p.metadata, command, 'obstacle'));
+      p.updateMapImage(await paintOccupancyShape(p.image, p.metadata, command, 'obstacle', e.brushColor));
     } finally { paintBusy.current = false; }
   };
 
@@ -271,7 +271,7 @@ export function MapCanvas() {
       <Layer>{p.objects.map(o=>{const station=['charging_station','docking_station'].includes(o.type);if(station&&!e.layers.stations.visible)return null;if(!station&&!e.layers.waypoints.visible)return null;const v=worldToPixel(o.x,o.y,p.metadata),selected=e.selection.includes(o.id),locked=station?e.layers.stations.locked:e.layers.waypoints.locked;return <Group key={o.id} x={v.x} y={v.y} rotation={-o.yaw*180/Math.PI} draggable={e.tool==='select'&&!locked} onDragStart={()=>p.commit()} onDragEnd={ev=>p.updateObject(o.id,pixelToWorld(ev.target.x(),ev.target.y(),p.metadata))} onClick={ev=>{ev.cancelBubble=true;e.setSelection([o.id])}}><Circle radius={(station?8:6)/e.viewport.scale} fill={station?'#14b8a6':o.type==='home'?'#3b82f6':'#f8fafc'} stroke={selected?'#0ea5e9':'#26313b'} strokeWidth={(selected?3:1.5)/e.viewport.scale}/><Arrow points={[0,0,16/e.viewport.scale,0]} pointerLength={5/e.viewport.scale} pointerWidth={5/e.viewport.scale} stroke="#26313b" fill="#26313b" strokeWidth={1.5/e.viewport.scale}/>{e.layers.labels.visible&&<Text text={o.name} x={8/e.viewport.scale} y={-18/e.viewport.scale} fontSize={10/e.viewport.scale} fill="#1e293b" rotation={o.yaw*180/Math.PI}/>}</Group>})}{drawing?.kind==='zone'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={drawing.points.length>2} fill="rgba(14,165,233,.12)" stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>
 
       {selectedObject && e.tool === 'select' && <Layer><RotationHandle object={selectedObject} scale={e.viewport.scale}/></Layer>}
-      {(brushDrag || brushPreviewPoints.length > 0) && <Layer listening={false}><BrushPreview drag={brushDrag} polygon={brushPreviewPoints} scale={e.viewport.scale}/></Layer>}
+      {(brushDrag || brushPreviewPoints.length > 0) && <Layer listening={false}><BrushPreview drag={brushDrag} polygon={brushPreviewPoints} scale={e.viewport.scale} color={e.brushColor}/></Layer>}
       {e.layers.robot.visible&&selectedObject&&<Layer listening={false}><RobotFootprint object={selectedObject} scale={e.viewport.scale}/></Layer>}
       {e.layers.validation.visible&&<Layer listening={false}>{p.issues.filter(i=>i.position).map(i=>{const v=worldToPixel(i.position!.x,i.position!.y,p.metadata);return <Group key={i.id} x={v.x} y={v.y}><Circle radius={11/e.viewport.scale} stroke={i.severity==='error'?'#ef4444':'#f59e0b'} strokeWidth={3/e.viewport.scale}/><Line points={[-6/e.viewport.scale,-6/e.viewport.scale,6/e.viewport.scale,6/e.viewport.scale]} stroke={i.severity==='error'?'#ef4444':'#f59e0b'} strokeWidth={2/e.viewport.scale}/><Line points={[-6/e.viewport.scale,6/e.viewport.scale,6/e.viewport.scale,-6/e.viewport.scale]} stroke={i.severity==='error'?'#ef4444':'#f59e0b'} strokeWidth={2/e.viewport.scale}/></Group>})}</Layer>}
       {e.tool==='measure'&&measurementPoints.length>0&&<Layer listening={false}><Measurement points={measurementPoints} fixed={measure} mode={e.measureMode} scale={e.viewport.scale}/></Layer>}
@@ -284,6 +284,7 @@ export function MapCanvas() {
         {(['freehand','line','rectangle','polygon'] as const).map(shape=><button key={shape} className={e.brushShape===shape?'active':''} onClick={()=>{e.setBrushShape(shape);setBrushDrag(null);setBrushPolygon([])}}>{shape[0].toUpperCase()+shape.slice(1)}</button>)}
       </div>}
       <label>Size <select value={e.brushSize} onChange={ev=>e.setBrushSize(Number(ev.target.value))}>{brushSizes.map(s=><option key={s} value={s}>{s} px</option>)}</select></label>
+      {e.tool==='brush'&&<label className="brushcolorlabel">Color <input aria-label="Brush color" type="color" value={e.brushColor} onChange={ev=>e.setBrushColor(ev.target.value)}/><code>{e.brushColor.toUpperCase()}</code></label>}
       {e.tool==='brush'&&e.brushShape==='polygon'&&brushPolygon.length>0&&<button onClick={()=>void finishBrushPolygon()} disabled={brushPolygon.length<3}>Apply Polygon</button>}
       {e.tool==='brush'&&e.brushShape==='polygon'&&brushPolygon.length>0&&<button onClick={()=>setBrushPolygon([])}>Clear</button>}
     </div>}
@@ -347,16 +348,16 @@ function canvasHint(tool: string, brushShape: string, brushSize: number, placeme
   return 'Wheel to zoom • V Select • H Pan';
 }
 
-function BrushPreview({drag, polygon, scale}:{drag:BrushDrag|null;polygon:Point[];scale:number}) {
+function BrushPreview({drag, polygon, scale, color}:{drag:BrushDrag|null;polygon:Point[];scale:number;color:string}) {
   const p=useProjectStore();
   if (drag) {
     const a=worldToPixel(drag.start.x,drag.start.y,p.metadata),b=worldToPixel(drag.end.x,drag.end.y,p.metadata);
-    if (drag.kind==='line') return <Line points={[a.x,a.y,b.x,b.y]} stroke="#ef4444" dash={[6/scale,4/scale]} strokeWidth={Math.max(2/scale, useEditorStore.getState().brushSize)} lineCap="round" opacity={.7}/>;
-    return <Rect x={Math.min(a.x,b.x)} y={Math.min(a.y,b.y)} width={Math.abs(b.x-a.x)} height={Math.abs(b.y-a.y)} fill="rgba(239,68,68,.18)" stroke="#ef4444" dash={[6/scale,4/scale]} strokeWidth={2/scale}/>;
+    if (drag.kind==='line') return <Line points={[a.x,a.y,b.x,b.y]} stroke={color} dash={[6/scale,4/scale]} strokeWidth={Math.max(2/scale, useEditorStore.getState().brushSize)} lineCap="round" opacity={.7}/>;
+    return <Rect x={Math.min(a.x,b.x)} y={Math.min(a.y,b.y)} width={Math.abs(b.x-a.x)} height={Math.abs(b.y-a.y)} fill={color+'33'} stroke={color} dash={[6/scale,4/scale]} strokeWidth={2/scale}/>;
   }
   if (polygon.length) {
     const pts=polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});
-    return <Line points={pts} closed={polygon.length>2} fill={polygon.length>2?'rgba(239,68,68,.16)':undefined} stroke="#ef4444" dash={[6/scale,4/scale]} strokeWidth={2/scale}/>;
+    return <Line points={pts} closed={polygon.length>2} fill={polygon.length>2?color+'29':undefined} stroke={color} dash={[6/scale,4/scale]} strokeWidth={2/scale}/>;
   }
   return null;
 }

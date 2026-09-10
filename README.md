@@ -2,9 +2,9 @@
 
 AMR Map Editor คือเว็บแอปสำหรับสร้าง แก้ไข ตรวจสอบ บันทึก และ Export แผนที่นำทางสำหรับ Autonomous Mobile Robot (AMR) โดยออกแบบให้มีลักษณะการใช้งานแบบ CAD / GIS / Industrial Robotics Engineering Tool
 
-เวอร์ชันปัจจุบันใช้ **Light Theme** สำหรับงานวิศวกรรม และรองรับ workflow หลักตั้งแต่ Import ROS map ไปจนถึงสร้าง Navigation Objects, Paths, Zones, แก้ Occupancy Map, Preview, Validate, Save/Open และ Export Navigation JSON / ROS Map
+เวอร์ชันปัจจุบันใช้ **Light Theme** สำหรับงานวิศวกรรม และรองรับ workflow หลักตั้งแต่ Import ROS map ไปจนถึงสร้าง Navigation Objects, Paths, Zones, แก้ Occupancy Map, Preview, Validate, Save/Open และ Export Navigation JSON / ROS Map / RMF `.building.yaml`
 
-> Project version: **0.5.0**
+> Project version: **0.9.0**
 
 ---
 
@@ -91,6 +91,7 @@ AMR Map Editor คือเว็บแอปสำหรับสร้าง �
   - Rectangle
   - Polygon
   - Brush size `1 / 3 / 5 / 10 / 20 / 50 px`
+  - Custom Brush Color Picker
 - Eraser restore จาก original imported map
 - Preview Mode สำหรับดูภาพรวมทั้งระบบ
 - Robot footprint preview
@@ -101,6 +102,7 @@ AMR Map Editor คือเว็บแอปสำหรับสร้าง �
 - `.amrmap` Save As / Open
 - Navigation JSON รวม Objects + Paths + Zones
 - ROS ZIP Export (`map.yaml` + `map.pgm`)
+- RMF Traffic Editor `.building.yaml` Export
 
 ---
 
@@ -627,6 +629,20 @@ B
 ```
 
 Brush Size มีผลกับ Freehand, Line และ Eraser
+
+## Brush Color
+
+เมื่อเลือก **Brush** จะมี Color Picker ใน Brush Toolbar สามารถเลือกสีที่ต้องการได้ก่อนวาด เช่น:
+
+```text
+#000000  Black
+#FF0000  Red
+#0066FF  Blue
+```
+
+สีใช้กับ Freehand, Line, Rectangle และ Polygon โดยตรง ส่วน Eraser ยังคง restore จาก original map
+
+> Brush Color เป็น visual color ของ raster ที่แก้ไข แต่ Brush ยังคงมี semantic เป็น **Occupied/Obstacle** สำหรับ Validation และ ROS PGM export เพื่อป้องกันไม่ให้สีที่เลือกทำให้ occupancy classification ผิด
 
 ## 11.1 Freehand
 
@@ -1386,3 +1402,43 @@ WB220126_Floor3-paths-selected.json
 ```
 
 ชื่อภาษาไทยสามารถใช้ได้ และระบบจะลบ/แทนที่อักขระที่ไม่เหมาะกับชื่อไฟล์ เช่น `/ \\ : * ? \" < > |` โดยอัตโนมัติ
+
+
+## RMF Traffic Editor `.building.yaml` Export (v0.9.0)
+
+เมนู **Export → RMF Building (.building.yaml)** จะสร้างไฟล์ เช่น:
+
+```text
+WB220126_Floor3.building.yaml
+```
+
+ไฟล์นี้เป็น Open-RMF Traffic Editor style building map navigation skeleton โดยใช้:
+
+```yaml
+coordinate_system: cartesian_meters
+```
+
+การแปลงข้อมูลหลัก:
+
+- Navigation Objects → `vertices`
+- Path segments → `lanes`
+- One-way Path → `bidirectional: false`
+- Bidirectional/other Path → `bidirectional: true`
+- Path Max Speed → `speed_limit`
+- Charging Station → `is_charger`
+- Waiting Point → `is_holding_point`
+- Parking Point → `is_parking_spot`
+- Docking Station → `dock_name`
+- Pickup Point → `pickup_dispenser`
+- Drop-off Point → `dropoff_ingestor`
+
+ไฟล์ `.building.yaml` จะอ้าง background image เป็นชื่อเดียวกัน เช่น:
+
+```yaml
+drawing:
+  filename: WB220126_Floor3.png
+```
+
+ดังนั้นถ้าต้องการเปิดใน Traffic Editor พร้อมภาพพื้นหลัง ให้ Export **Occupancy PNG** ด้วยชื่อ base เดียวกันแล้ววาง `.building.yaml` และ `.png` ไว้ในโฟลเดอร์เดียวกัน
+
+> หมายเหตุ: Export นี้เน้น Navigation Graph/Vertices/Lanes จาก AMR Map Editor ยังไม่ได้สร้าง walls, doors, lifts, models หรือ simulation geometry แบบเต็มของ Traffic Editor

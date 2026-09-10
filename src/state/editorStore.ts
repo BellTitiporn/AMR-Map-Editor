@@ -18,6 +18,7 @@ interface EditorState {
   zoneType: ZoneType;
   brushSize: number;
   brushShape: BrushShape;
+  brushColor: string;
   setTool: (t: Tool) => void;
   setPlacementObject: (t: NavObjectType | null) => void;
   setPathType: (t: PathType) => void;
@@ -25,6 +26,7 @@ interface EditorState {
   setMeasureMode: (m: 'distance' | 'area') => void;
   setBrushSize: (size: number) => void;
   setBrushShape: (shape: BrushShape) => void;
+  setBrushColor: (color: string) => void;
   setSelection: (ids: string[]) => void;
   setSelectedPathPoint: (value: { pathId: string; index: number } | null) => void;
   setViewport: (v: Viewport) => void;
@@ -50,6 +52,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   zoneType: 'no_go',
   brushSize: 10,
   brushShape: 'freehand',
+  brushColor: '#000000',
   setTool: tool => set({ tool, placementObject: null, selectedPathPoint: null }),
   setPlacementObject: placementObject => set({ placementObject, tool: 'select', selectedPathPoint: null }),
   setPathType: pathType => set({ pathType, tool: 'path', placementObject: null, selectedPathPoint: null }),
@@ -57,6 +60,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   setMeasureMode: measureMode => set({ measureMode, tool: 'measure', placementObject: null, selectedPathPoint: null }),
   setBrushSize: brushSize => set({ brushSize: Math.max(1, Math.min(100, brushSize)) }),
   setBrushShape: brushShape => set({ brushShape, tool: 'brush', placementObject: null, selectedPathPoint: null }),
+  setBrushColor: brushColor => set({ brushColor: /^#[0-9a-fA-F]{6}$/.test(brushColor) ? brushColor : '#000000' }),
   setSelection: selection => set({ selection, selectedPathPoint: null }),
   setSelectedPathPoint: selectedPathPoint => set({ selectedPathPoint }),
   setViewport: viewport => set({ viewport }),

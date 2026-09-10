@@ -29,7 +29,7 @@ export function exportBaseName(value:string,fallback='map'){
   const suffixes=[
     '-navigation-selected.json','-navigation.json','-waypoints-selected.json','-waypoints.json',
     '-paths-selected.json','-paths.json','-zones-selected.json','-zones.json','-ros-map.zip',
-    '.amrmap','.yaml','.yml','.pgm','.png','.json','.zip'
+    '.amrmap','.building.yaml','.yaml','.yml','.pgm','.png','.json','.zip'
   ];
   const lower=clean.toLowerCase();
   const suffix=suffixes.find(s=>lower.endsWith(s));

@@ -1,5 +1,5 @@
 import type { MapImageData, MapMetadata, Point2D } from '../../models';
-import { uint8ToBase64 } from '../../utils/files';
+import { base64ToUint8, uint8ToBase64 } from '../../utils/files';
 
 export type OccupancyPaintMode = 'obstacle' | 'free' | 'erase';
 export type OccupancyPaintCommand =
@@ -39,15 +39,42 @@ async function buildResult(
   canvas: HTMLCanvasElement,
   image: MapImageData | null,
   metadata: MapMetadata,
-  originalDataUrl: string
+  originalDataUrl: string,
+  command: OccupancyPaintCommand,
+  mode: OccupancyPaintMode,
 ): Promise<MapImageData> {
   const dataUrl = canvas.toDataURL('image/png');
   const rgba = ctx.getImageData(0, 0, metadata.width, metadata.height).data;
-  const occ = new Uint8Array(metadata.width * metadata.height);
   const negate = image?.negate ?? 0;
   const occupied = image?.occupiedThresh ?? .65;
   const free = image?.freeThresh ?? .196;
+
+  // Start from the existing semantic occupancy grid whenever possible. This keeps
+  // custom brush colors purely visual while obstacle/free meaning stays correct.
+  const occ = image?.occupancyBase64
+    ? base64ToUint8(image.occupancyBase64)
+    : new Uint8Array(metadata.width * metadata.height);
+
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = metadata.width;
+  maskCanvas.height = metadata.height;
+  const maskCtx = maskCanvas.getContext('2d');
+  if (!maskCtx) throw new Error('Canvas is unavailable.');
+  maskCtx.fillStyle = '#fff';
+  maskCtx.strokeStyle = '#fff';
+  maskCtx.lineCap = 'round';
+  maskCtx.lineJoin = 'round';
+  if (command.shape === 'line') maskCtx.lineWidth = Math.max(1, command.size);
+  traceCommand(maskCtx, command);
+  if (command.shape === 'line') maskCtx.stroke(); else maskCtx.fill();
+  const mask = maskCtx.getImageData(0, 0, metadata.width, metadata.height).data;
+
   for (let i = 0; i < occ.length; i++) {
+    if (mask[i * 4 + 3] === 0) continue;
+    if (mode === 'obstacle') { occ[i] = 1; continue; }
+    if (mode === 'free') { occ[i] = 0; continue; }
+    // Eraser restores original pixels, so recover their semantic occupancy from
+    // the resulting raster only for the erased region.
     const j = i * 4;
     const gray = Math.round(rgba[j] * .299 + rgba[j + 1] * .587 + rgba[j + 2] * .114);
     const prob = negate ? gray / 255 : (255 - gray) / 255;
@@ -75,7 +102,8 @@ export async function paintOccupancyShape(
   image: MapImageData | null,
   metadata: MapMetadata,
   command: OccupancyPaintCommand,
-  mode: OccupancyPaintMode = 'obstacle'
+  mode: OccupancyPaintMode = 'obstacle',
+  color = '#000000',
 ): Promise<MapImageData> {
   const canvas = document.createElement('canvas');
   canvas.width = metadata.width;
@@ -106,14 +134,14 @@ export async function paintOccupancyShape(
     ctx.clip();
     ctx.drawImage(original, 0, 0, metadata.width, metadata.height);
   } else {
-    ctx.fillStyle = mode === 'obstacle' ? '#000' : '#fff';
+    ctx.fillStyle = mode === 'obstacle' ? color : '#fff';
     ctx.strokeStyle = ctx.fillStyle;
     if (isLine) ctx.stroke();
     else ctx.fill();
   }
   ctx.restore();
 
-  return buildResult(ctx, canvas, image, metadata, originalDataUrl);
+  return buildResult(ctx, canvas, image, metadata, originalDataUrl, command, mode);
 }
 
 /** Backward-compatible freehand helper. */
@@ -123,7 +151,8 @@ export async function paintOccupancy(
   px: number,
   py: number,
   mode: OccupancyPaintMode,
-  size = 10
+  size = 10,
+  color = '#000000',
 ): Promise<MapImageData> {
-  return paintOccupancyShape(image, metadata, { shape: 'point', point: { x: px, y: py }, size }, mode);
+  return paintOccupancyShape(image, metadata, { shape: 'point', point: { x: px, y: py }, size }, mode, color);
 }

@@ -134,3 +134,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 
 /* Export file-name control */
 .exportfilename{display:grid;gap:6px;padding:10px 8px 14px;border-bottom:1px solid var(--border,#d5dee8);margin-bottom:8px}.exportfilename label{font-size:12px;color:var(--text,#24364b)}.exportfilename input{width:100%;box-sizing:border-box;height:34px;padding:6px 9px;border:1px solid var(--border,#b9c7d5);background:var(--surface,#fff);color:var(--text,#24364b);font:inherit;outline:none}.exportfilename input:focus{border-color:#168bd2;box-shadow:0 0 0 2px rgba(22,139,210,.12)}.exportfilename small{font-size:11px;color:var(--muted,#6b7f93)}.exportfilename code{font-size:11px}
+
+/* v0.9.0 — Brush color picker */
+.brushcolorlabel{border-left:1px solid var(--border,#d5dee8);margin-left:2px;padding-left:8px!important}
+.brushcolorlabel input[type="color"]{width:30px;height:24px;padding:1px;border:1px solid #b9c7d5;background:#fff;border-radius:2px;cursor:pointer}
+.brushcolorlabel code{font-size:9px;color:#5d7183;min-width:54px}
