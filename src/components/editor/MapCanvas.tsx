@@ -7,6 +7,7 @@ import { factoryObstacleRects } from '../../map-engine/factorySeed';
 import { distance, polylineLength } from '../../geometry/distance';
 import { polygonArea } from '../../geometry/polygon';
 import { headingLabel, normalizeAngle, radiansToDegrees } from '../../geometry/angles';
+import { collectPathJunctions, connectPathEndpoint, DEFAULT_PATH_SNAP_DISTANCE_M } from '../../geometry/pathTopology';
 import { paintOccupancy, paintOccupancyShape } from '../../services/mapEditing/occupancyEditor';
 import type { MapMetadata, NavigationPath } from '../../models';
 
@@ -57,7 +58,11 @@ export function MapCanvas() {
     if (drawing.kind === 'path' && drawing.points.length > 1) {
       p.commit();
       const id = 'P-' + crypto.randomUUID().slice(0, 8);
-      p.addPath({ id, name: 'New Path', type: e.pathType, points: drawing.points, width: 1, maxSpeed: 1, enabled: true });
+      const created: NavigationPath = { id, name: 'New Path', type: e.pathType, points: drawing.points, width: 1, maxSpeed: 1, enabled: true };
+      let nextPaths = [...p.paths, created];
+      nextPaths = connectPathEndpoint(nextPaths, p.objects, id, 'start', DEFAULT_PATH_SNAP_DISTANCE_M).paths;
+      nextPaths = connectPathEndpoint(nextPaths, p.objects, id, 'end', DEFAULT_PATH_SNAP_DISTANCE_M).paths;
+      p.replacePaths(nextPaths);
       e.setSelection([id]);
     } else if (drawing.kind === 'zone' && drawing.points.length > 2) {
       p.commit();
@@ -117,6 +122,15 @@ export function MapCanvas() {
       } else if (x.key === 'Enter') {
         if (e.tool === 'brush' && e.brushShape === 'polygon') void finishBrushPolygon();
         else finishPathOrZone();
+      } else if ((x.key === 'Delete' || x.key === 'Backspace') && e.selectedPathPoint) {
+        x.preventDefault();
+        const selected = e.selectedPathPoint;
+        const path = p.paths.find(q => q.id === selected.pathId);
+        if (path && path.points.length > 2 && selected.index >= 0 && selected.index < path.points.length) {
+          p.commit();
+          p.updatePath(path.id, { points: path.points.filter((_, index) => index !== selected.index) });
+          e.setSelectedPathPoint(null);
+        }
       } else if (x.key === 'Delete' && e.selection.length) {
         p.commit(); p.deleteIds(e.selection); e.setSelection([]);
       } else if (x.key === 'Escape') {
@@ -191,6 +205,7 @@ export function MapCanvas() {
   const selectedObject=p.objects.find(o=>e.selection.includes(o.id));
   const measurementPoints=hover&&e.tool==='measure'&&measure.length?[...measure,hover]:measure;
   const measurementTotal=e.measureMode==='area'&&measure.length>=3?polygonArea(measure):polylineLength(measure);
+  const pathJunctions = collectPathJunctions(p.paths, p.objects);
 
   const brushPreviewPoints = brushPolygon.length
     ? [...brushPolygon, ...(hover && e.tool === 'brush' && e.brushShape === 'polygon' ? [hover] : [])]
@@ -226,7 +241,32 @@ export function MapCanvas() {
 
       {e.layers.zones.visible&&<Layer>{p.zones.map(z=>{const pts=z.polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={z.id}><Line points={pts} closed fill={zoneFill[z.type]} stroke={e.selection.includes(z.id)?'#0ea5e9':'#8b5e34'} strokeWidth={(e.selection.includes(z.id)?3:1.5)/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([z.id])}}/>{e.layers.labels.visible&&<Text x={pts[0]+5} y={pts[1]+5} text={z.name} fontSize={11/e.viewport.scale} fill="#684c2e"/>}{e.selection.includes(z.id)&&!e.layers.zones.locked&&z.polygon.map((q,i)=>{const v=worldToPixel(q.x,q.y,p.metadata);return <Circle key={i} x={v.x} y={v.y} radius={5/e.viewport.scale} fill="#fff" stroke="#0ea5e9" strokeWidth={2/e.viewport.scale} draggable onDragStart={()=>p.commit()} onDragEnd={ev=>{const poly=[...z.polygon];poly[i]=pixelToWorld(ev.target.x(),ev.target.y(),p.metadata);p.updateZone(z.id,{polygon:poly})}}/>})}</Group>})}</Layer>}
 
-      {e.layers.paths.visible&&<Layer>{p.paths.map(path=>{const pts=path.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={path.id}><Line points={pts} stroke={e.selection.includes(path.id)?'#0ea5e9':path.type==='restricted'?'#ef4444':'#475569'} strokeWidth={(e.selection.includes(path.id)?4:2.5)/e.viewport.scale} lineCap="round" lineJoin="round" hitStrokeWidth={12/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([path.id])}}/><PathDirectionOverlay path={path} metadata={p.metadata} scale={e.viewport.scale} showBadge={e.layers.labels.visible} />{e.selection.includes(path.id)&&!e.layers.paths.locked&&path.points.map((q,i)=>{const v=worldToPixel(q.x,q.y,p.metadata);return <Circle key={i} x={v.x} y={v.y} radius={5/e.viewport.scale} fill="#fff" stroke="#0ea5e9" strokeWidth={2/e.viewport.scale} draggable onDragStart={()=>p.commit()} onDragEnd={ev=>{const pp=[...path.points];pp[i]=pixelToWorld(ev.target.x(),ev.target.y(),p.metadata);p.updatePath(path.id,{points:pp})}}/>})}</Group>})}{drawing?.kind==='path'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>}
+      {e.layers.paths.visible&&<Layer>{p.paths.map(path=>{
+          const pts=path.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});
+          return <Group key={path.id}>
+            <Line points={pts} stroke={e.selection.includes(path.id)?'#0ea5e9':path.type==='restricted'?'#ef4444':'#475569'} strokeWidth={(e.selection.includes(path.id)?4:2.5)/e.viewport.scale} lineCap="round" lineJoin="round" hitStrokeWidth={12/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([path.id])}}/>
+            <PathDirectionOverlay path={path} metadata={p.metadata} scale={e.viewport.scale} showBadge={e.layers.labels.visible} />
+            {e.selection.includes(path.id)&&!e.layers.paths.locked&&path.points.map((q,i)=>{
+              const v=worldToPixel(q.x,q.y,p.metadata);
+              const pointSelected=e.selectedPathPoint?.pathId===path.id&&e.selectedPathPoint.index===i;
+              return <Circle key={i} x={v.x} y={v.y} radius={(pointSelected?7:5)/e.viewport.scale} fill={pointSelected?'#fee2e2':'#fff'} stroke={pointSelected?'#dc2626':'#0ea5e9'} strokeWidth={(pointSelected?3:2)/e.viewport.scale} draggable
+                onClick={ev=>{ev.cancelBubble=true;e.setSelectedPathPoint({pathId:path.id,index:i})}}
+                onTap={ev=>{ev.cancelBubble=true;e.setSelectedPathPoint({pathId:path.id,index:i})}}
+                onDragStart={()=>p.commit()}
+                onDragEnd={ev=>{
+                  const pp=[...path.points];
+                  pp[i]=pixelToWorld(ev.target.x(),ev.target.y(),p.metadata);
+                  let nextPaths=p.paths.map(item=>item.id===path.id?{...item,points:pp}:item);
+                  if(i===0) nextPaths=connectPathEndpoint(nextPaths,p.objects,path.id,'start',DEFAULT_PATH_SNAP_DISTANCE_M).paths;
+                  else if(i===path.points.length-1) nextPaths=connectPathEndpoint(nextPaths,p.objects,path.id,'end',DEFAULT_PATH_SNAP_DISTANCE_M).paths;
+                  p.replacePaths(nextPaths);
+                  e.setSelectedPathPoint({pathId:path.id,index:i});
+                }}/>
+            })}
+          </Group>
+        })}
+        {drawing?.kind==='path'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>}
+      {e.layers.paths.visible&&<Layer listening={false}>{pathJunctions.map((junction,index)=>{const v=worldToPixel(junction.x,junction.y,p.metadata);return <Group key={`junction-${index}`} x={v.x} y={v.y}><Circle radius={7/e.viewport.scale} fill="#16a34a" stroke="#fff" strokeWidth={2/e.viewport.scale}/><Circle radius={2/e.viewport.scale} fill="#fff"/>{e.layers.labels.visible&&<Text x={9/e.viewport.scale} y={-7/e.viewport.scale} text="CONNECTED" fontSize={8/e.viewport.scale} fill="#166534"/>}</Group>})}</Layer>}
 
       <Layer>{p.objects.map(o=>{const station=['charging_station','docking_station'].includes(o.type);if(station&&!e.layers.stations.visible)return null;if(!station&&!e.layers.waypoints.visible)return null;const v=worldToPixel(o.x,o.y,p.metadata),selected=e.selection.includes(o.id),locked=station?e.layers.stations.locked:e.layers.waypoints.locked;return <Group key={o.id} x={v.x} y={v.y} rotation={-o.yaw*180/Math.PI} draggable={e.tool==='select'&&!locked} onDragStart={()=>p.commit()} onDragEnd={ev=>p.updateObject(o.id,pixelToWorld(ev.target.x(),ev.target.y(),p.metadata))} onClick={ev=>{ev.cancelBubble=true;e.setSelection([o.id])}}><Circle radius={(station?8:6)/e.viewport.scale} fill={station?'#14b8a6':o.type==='home'?'#3b82f6':'#f8fafc'} stroke={selected?'#0ea5e9':'#26313b'} strokeWidth={(selected?3:1.5)/e.viewport.scale}/><Arrow points={[0,0,16/e.viewport.scale,0]} pointerLength={5/e.viewport.scale} pointerWidth={5/e.viewport.scale} stroke="#26313b" fill="#26313b" strokeWidth={1.5/e.viewport.scale}/>{e.layers.labels.visible&&<Text text={o.name} x={8/e.viewport.scale} y={-18/e.viewport.scale} fontSize={10/e.viewport.scale} fill="#1e293b" rotation={o.yaw*180/Math.PI}/>}</Group>})}{drawing?.kind==='zone'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={drawing.points.length>2} fill="rgba(14,165,233,.12)" stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>
 

@@ -1238,3 +1238,119 @@ AMR Map Editor อยู่ในสถานะ Engineering Tool / Development 
 - Charging / Docking pose และ yaw
 - Validation errors ทั้งหมด
 - ทดสอบใน staging/test environment ก่อน deploy ไป production
+
+
+## Delete a Single Path Point / Vertex
+
+Path vertices can now be removed individually without deleting the entire path.
+
+1. Select the path with the Select tool (`V`).
+2. Click one of the circular path vertices.
+3. The selected vertex is highlighted in red.
+4. Delete it using either:
+   - `Delete`
+   - `Backspace`
+   - **Properties → Path Points → Delete Point**
+5. The remaining path vertices are automatically reconnected.
+6. The operation can be reverted with `Ctrl/Cmd + Z`.
+
+The Properties panel also allows editing the selected vertex X/Y world coordinates directly.
+
+> A valid path must contain at least 2 points. When only 2 points remain, **Delete Point** is disabled. Deleting the whole path remains available through the normal Path Delete button.
+
+
+
+## Path Connectivity / Junctions (v0.8.0)
+
+ในเวอร์ชัน 0.8.0 การที่ Path สองเส้นดูเหมือนแตะหรือตัดกันบนหน้าจอ **ไม่ถือว่าเชื่อมกันโดยอัตโนมัติ** ระบบใช้ topology connection ที่เกิดจากพิกัด vertex ที่ตรงกันจริง
+
+### สัญลักษณ์ CONNECTED
+
+เมื่อ Path endpoint เชื่อมกับ Waypoint / Station / Path อื่นจริง จะเห็น **จุด Junction สีเขียว** พร้อมคำว่า `CONNECTED` บน Map
+
+```text
+PATH-A ─────●───── PATH-B
+            ↑
+       green junction
+```
+
+จุดสีเขียวหมายถึง Path share coordinate/vertex เดียวกันจริง ไม่ใช่แค่เส้นวาดทับกัน
+
+### Auto Snap
+
+เมื่อสร้าง Path ใหม่ หรือ drag จุด Start / End ของ Path เข้าใกล้:
+
+- Waypoint
+- Home
+- Charging Station
+- Docking Station
+- Pickup / Drop-off
+- Path vertex
+- Path segment
+
+ภายในระยะประมาณ `0.25 m` ระบบจะ snap ให้โดยอัตโนมัติ
+
+ถ้า endpoint ถูกลากไปชน **กลาง Path อื่น** ระบบจะเพิ่ม vertex ให้ Path เป้าหมายโดยอัตโนมัติ เพื่อสร้าง junction จริง
+
+```text
+ก่อน
+
+PATH-A ─────────────
+               ↑ endpoint PATH-B
+
+หลัง
+
+PATH-A ───────●─────
+              │
+              │ PATH-B
+```
+
+### Path Connectivity panel
+
+เลือก Path แล้วดูที่ Properties → **PATH CONNECTIVITY**
+
+จะแสดงสถานะ:
+
+```text
+START   Connected / Open
+END     Connected / Open
+```
+
+และมีปุ่ม:
+
+- `Connect Start`
+- `Connect End`
+- `Connect Both`
+- `Merge with <path>` เมื่อมี Path ที่ compatible อยู่ใกล้
+
+### Connect vs Merge
+
+**Connect** เหมาะกับกรณีส่วนใหญ่ เพราะ Path ยังเป็นคนละเส้นและสามารถมี speed/type/direction ต่างกันได้
+
+```text
+        PATH-C
+           │
+PATH-A ────●──── PATH-B
+```
+
+**Merge** ใช้เมื่อต้องการรวมสอง Path ให้กลายเป็น Path เดียวจริง ๆ
+
+ระบบจะอนุญาต Merge เฉพาะกรณีที่ปลอดภัย เช่น Path type compatible กัน สำหรับ One-way Path จะไม่ merge ถ้าต้องกลับทิศทางของเส้น
+
+ถ้า Path เป็นคนละ type เช่น:
+
+```text
+One-way + Bidirectional
+```
+
+ควรใช้ **Connect** แทน Merge เพื่อรักษา routing rule ของแต่ละ Path
+
+### Validation เพิ่มเติม
+
+Validate Map จะเตือนกรณี:
+
+```text
+Path A crosses Path B visually but no topology junction exists.
+```
+
+หมายความว่าเส้นตัดกันบนภาพ แต่ไม่ได้ share vertex จริง ให้ใช้ Connect หรือแก้ vertex ให้ตรงกันจนเห็นจุด `CONNECTED` สีเขียว
