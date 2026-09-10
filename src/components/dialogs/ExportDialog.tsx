@@ -4,7 +4,7 @@ import { useEditorStore } from '../../state/editorStore';
 import { exportProjectFile } from '../../services/export/projectExporter';
 import { downloadNavigation,downloadPaths,downloadWaypoints,downloadZones } from '../../services/export/navigationExporters';
 import { exportPgm,exportRosZip,generateRosYaml } from '../../services/export/rosExporter';
-import { downloadBuildingYaml } from '../../services/export/buildingExporter';
+// Building YAML exporter is not available in this release; building export is disabled.
 import { downloadBlob,downloadTextFile,exportBaseName } from '../../utils/files';
 
 export function ExportDialog({onClose}:{onClose:()=>void}){
@@ -25,7 +25,9 @@ export function ExportDialog({onClose}:{onClose:()=>void}){
       else if(type==='paths')downloadPaths(ps,`${base}-paths${selectedSuffix}.json`);
       else if(type==='zones')downloadZones(zs,`${base}-zones${selectedSuffix}.json`);
       else if(type==='navigation')downloadNavigation(p.metadata,os,ps,zs,[p.robot],`${base}-navigation${selectedSuffix}.json`);
-      else if(type==='building')downloadBuildingYaml(p.metadata,p.objects,p.paths,base);
+      else if(type==='building'){
+        throw new Error('Building YAML export is not available in this build.');
+      }
       else{
         if(!p.image)throw new Error('No occupancy map image is loaded.');
         if(type==='ros')await exportRosZip(p.metadata,p.image,base);
