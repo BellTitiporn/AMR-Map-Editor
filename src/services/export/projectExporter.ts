@@ -1,2 +1,7 @@
-import type { AMRMapProjectFile } from '../../models';import { downloadJSON,safeFilename } from '../../utils/files';
-export function exportProjectFile(file:AMRMapProjectFile){downloadJSON(file,`${safeFilename(file.project.name,'project')}.amrmap`)}
+import type { AMRMapProjectFile } from '../../models';
+import { downloadJSON,exportBaseName } from '../../utils/files';
+
+export function exportProjectFile(file:AMRMapProjectFile,fileName?:string){
+  const base=exportBaseName(fileName??file.project.name,'project');
+  downloadJSON(file,`${base}.amrmap`);
+}

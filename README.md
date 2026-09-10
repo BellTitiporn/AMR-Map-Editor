@@ -376,218 +376,54 @@ Pan/Zoom ไม่ถูกบันทึกใน Undo history
 
 # 7. Navigation Objects
 
-Navigation Objects คือ **จุดเชิงตรรกะ (logical nodes)** บนแผนที่ที่ใช้บอกว่า Robot สามารถไปถึงจุดใด หยุดที่ใด เริ่ม/จบงานที่ใด หรือทำ operation อะไรเมื่อถึงตำแหน่งนั้น
-
-Navigation Object ทุกประเภทมีข้อมูลพื้นฐานคล้ายกัน:
-
-```ts
-{
-  id,
-  name,
-  type,
-  x,
-  y,
-  yaw,
-  description,
-  enabled
-}
-```
-
-- `x`, `y` = World Coordinate หน่วยเมตร
-- `yaw` = Heading/Orientation ของ Robot ที่จุดนั้น
-- `type` = ความหมายเชิงงานของจุด
-- `enabled` = เปิด/ปิดการใช้งานโดยไม่ต้องลบออกจาก Project
-
-> จุดที่ Robot ต้องไปถึงจริง เช่น Pickup, Drop-off, Charging, Docking, Waiting หรือ Parking ควรเชื่อมกับ Path topology จริง ไม่ใช่เพียงวางไว้ใกล้เส้น Path
-
-## 7.1 Waypoint
-
-**Waypoint** คือจุดอ้างอิงทั่วไปของ Navigation Graph ใช้กับ Junction, จุดเลี้ยว, ทางเข้า/ออก corridor, จุดเปลี่ยน traffic rule หรือจุดแบ่ง Path เป็น segment
-
-```text
-WP-001 ●────────● WP-002
-                │
-                ● WP-003
-```
-
-Robot ไม่จำเป็นต้องหยุดที่ Waypoint ทุกจุด เพราะ Waypoint อาจเป็นเพียง node ที่ planner ใช้ตัดสินใจเลือกเส้นทาง
-
-**ควรใช้เมื่อ:** จุดนั้นสำคัญต่อ routing topology แต่ไม่ได้เป็น task station โดยตรง
-
-**ไม่จำเป็นต้องใช้เมื่อ:** เป็นทางตรงยาวที่ไม่มี junction, turn หรือ rule change
-
----
-
-## 7.2 Home
-
-**Home** คือจุดฐานหรือจุดเริ่มต้นประจำของ Robot
-
-เหมาะสำหรับ:
-
-- จุดเริ่มต้นเชิง operation
-- จุดที่ Robot กลับมารอเมื่อเริ่ม/จบ shift
-- Default base position
-
-```text
-HOME ●────────● WP-001
-```
-
-**ต่างจาก Parking:** Home เป็นฐานหลัก ส่วน Parking เป็นจุดจอด idle ที่อาจมีหลายตำแหน่ง
-
----
-
-## 7.3 Charging Station
-
-**Charging Station** คือจุดสำหรับ Dock เพื่อชาร์จแบตเตอรี่
-
-เหมาะสำหรับ:
-
-- Auto charging
-- Opportunity charging
-- Low-battery recovery
-- Fleet charging strategy
-
-```text
-Path ─────────● CHARGE-01
-               ↑
-             Heading
-```
-
-Position และโดยเฉพาะ `yaw` ต้องแม่น เพราะ Robot มักต้องเข้าหา charger ใน orientation ที่กำหนด
-
-ตัวอย่าง logic:
-
-```text
-Battery < 20%
-→ Route to CHARGE-01
-→ Dock
-→ Charge
-```
-
-ควรมี Path endpoint หรือ junction ที่เชื่อมถึง Charging Station จริง และควรมี approach path ที่ปลอด obstacle
-
----
-
-## 7.4 Docking Station
-
-**Docking Station** คือจุดที่ Robot ต้องเข้าจอดเทียบกับอุปกรณ์หรือสถานี เช่น Conveyor, Machine, Lift interface, Workstation หรือ Material transfer station
-
-```text
-AMR → DOCK-01 → Conveyor
-```
-
-**ต่างจาก Charging Station:** Charging เป็น docking เพื่อชาร์จไฟ ส่วน Docking Station ทั่วไปใช้ interface กับอุปกรณ์อื่น
-
-Position และ Yaw สำคัญมากเพราะ docking มักมี tolerance จำกัด
-
----
-
-## 7.5 Pickup Point
-
-**Pickup Point** คือจุดที่ Robot รับวัสดุหรือสินค้า เช่น Pallet, Tote, Tray หรือ Material จาก conveyor
-
-```text
-Robot
-  ↓
-PICKUP-A
-  ↓
-Load material
-```
-
-Pickup ต้องเป็น destination ที่เข้าถึงได้จริง จึงควรเชื่อมกับ Path topology ไม่ควรแค่วางจุดไว้ใกล้ Path
-
-หากต้องเข้ารับของจากทิศเฉพาะ ควรกำหนด Yaw ให้ตรงกับ approach direction
-
----
-
-## 7.6 Drop-off Point
-
-**Drop-off Point** คือจุดที่ Robot ส่งหรือปล่อยวัสดุ
-
-```text
-PICKUP-A
-   ↓
-   ↓ Path
-   ↓
-DROPOFF-A
-```
-
-ตัวอย่าง workflow:
-
-```text
-Go to PICKUP-A
-→ Pickup
-→ Go to DROPOFF-A
-→ Drop-off
-```
-
-ควรเป็น node ที่เชื่อมกับ Path จริงเช่นเดียวกับ Pickup
-
----
-
-## 7.7 Waiting Point
-
-**Waiting Point** คือจุดให้ Robot หยุดรอชั่วคราวระหว่าง workflow
-
-เหมาะสำหรับ:
-
-- รอก่อนเข้า aisle แคบ
-- รอก่อนเข้า lift
-- รอ machine ready
-- รอ traffic clearance
-- Queueing point
-
-```text
-WAIT-01 ●
-         │
-         │  Wait until corridor is clear
-         ▼
-      Production
-```
-
-**ต่างจาก Waypoint:** Waypoint เป็น routing node ทั่วไป ส่วน Waiting Point มีความหมายว่า Robot สามารถถูกสั่งให้หยุดรอที่จุดนั้นได้
-
----
-
-## 7.8 Parking Point
-
-**Parking Point** คือจุดสำหรับจอด Robot เมื่อไม่มีงานหรือไม่ได้ใช้งานชั่วคราว
-
-เหมาะสำหรับ Idle parking, Fleet staging หรือจุดจอดสำรอง
-
-```text
-PARK-01 ●
-PARK-02 ●
-PARK-03 ●
-```
-
-**ต่างจาก Waiting:** Waiting คือรอชั่วคราวระหว่าง task/traffic ส่วน Parking คือจอด idle นานกว่าและมักอยู่นอก main traffic lane
-
----
-
-## วิธีสร้าง Navigation Object
-
-1. ไปที่ Tab **Objects**
-2. เลือก Object Type
-3. คลิก `+` หรือรายการนั้น
-4. คลิกตำแหน่งบน Map
-5. Object ใหม่จะถูก Select
-6. แก้ Properties ทางขวา
-
-สามารถแก้ Name, ID, Type, X, Y, Heading/Yaw, Description และ Enabled
-
-## สรุป Navigation Objects
-
-| Object | ความหมายหลัก | Robot มักทำอะไรเมื่อถึงจุด |
-|---|---|---|
-| Waypoint | Routing node | ผ่าน / เลี้ยว / เลือกเส้นทาง |
-| Home | ฐานประจำ | เริ่มงาน / กลับฐาน |
-| Charging Station | จุดชาร์จ | Dock และชาร์จ |
-| Docking Station | จุดเทียบอุปกรณ์ | Dock กับ machine/conveyor |
-| Pickup Point | จุดรับของ | หยุดและรับวัสดุ |
-| Drop-off Point | จุดส่งของ | หยุดและส่งวัสดุ |
-| Waiting Point | จุดรอชั่วคราว | Queue / รอ traffic |
-| Parking Point | จุดจอด idle | จอดเมื่อไม่มีงาน |
+ไปที่ **Objects** แล้วเลือก:
+
+- Waypoint
+- Home
+- Charging Station
+- Docking Station
+- Pickup Point
+- Drop-off Point
+- Waiting Point
+- Parking Point
+
+## วิธีสร้าง
+
+1. เลือกชนิด Object
+2. คลิก `+` หรือรายการนั้น
+3. คลิกบน Map
+4. Object ใหม่จะถูก select
+5. Inspector ด้านขวาจะแสดง properties
+
+สามารถแก้:
+
+- Name
+- ID
+- Type
+- X
+- Y
+- Yaw
+- Description
+- Enabled
+
+ลาก Object บน map → X/Y ใน Inspector เปลี่ยนตาม
+
+แก้ X/Y ใน Inspector → Object บน map ย้ายตาม
+
+## คำแนะนำในการวาง Waypoint
+
+ควรวางที่:
+
+- Junction
+- Turn
+- จุดเข้า/ออก corridor
+- Station approach
+- Pickup / Drop-off
+- Waiting area
+- Parking area
+- จุดที่ traffic rule เปลี่ยน
+
+ไม่จำเป็นต้องวาง waypoint ทุกระยะบนทางตรงยาว
 
 ---
 
@@ -612,17 +448,6 @@ Yaw = 1.5708 rad ≈ 90°
 
 # 9. Paths และ Navigation Graph
 
-Path คือ **เส้นทางที่ Robot ได้รับอนุญาตให้เดินทาง** ระหว่าง Navigation Nodes หรือพื้นที่ต่าง ๆ บนแผนที่
-
-```text
-Navigation Object = Node
-Path              = Edge
-```
-
-Path สามารถเก็บ Name/ID, Type, Points/Vertices, Maximum Speed, Width, Safety Clearance, Priority, Robot Types และ Enabled
-
-## Path Types
-
 รองรับ:
 
 - Normal Path
@@ -631,304 +456,155 @@ Path สามารถเก็บ Name/ID, Type, Points/Vertices, Maximum Spee
 - Bidirectional Path
 - Restricted Path
 
-## 9.1 Normal Path
-
-**Normal Path** คือเส้นทางมาตรฐาน ไม่มี preference หรือ restriction พิเศษ
-
-```text
-A ●────────────● B
-```
-
-เหมาะกับ Corridor ทั่วไป, Connector route และเส้นทางพื้นฐานระหว่าง waypoint
-
----
-
-## 9.2 Preferred Path
-
-**Preferred Path** คือเส้นทางที่ต้องการให้ planner/fleet manager เลือกก่อนเมื่อมีหลาย route ไปถึงปลายทางเดียวกัน
-
-เหมาะกับ:
-
-- Main transport corridor
-- Route ที่ปลอดภัยหรือกว้างกว่า
-- Route ที่ต้องการลด traffic ในพื้นที่อื่น
-- เส้นที่ต้องการ lower planning cost
-
-ตัว Editor เก็บ `type = preferred` ส่วน planner/backend เป็นผู้ตีความ priority/cost จริง
-
----
-
-## 9.3 One-way Path
-
-**One-way Path** อนุญาตให้ Robot วิ่งได้เพียงทิศเดียว
-
-```text
-A ●────────────→● B
-```
-
-Direction อิงตามลำดับ vertex:
-
-```text
-A → B → C
-```
-
-เหมาะกับ Aisle แคบ, Corridor ที่สวนกันไม่ได้, Production flow ทางเดียว หรือพื้นที่ที่ต้องลด deadlock
-
-บน Map มี direction arrows และ badge `ONE-WAY A → B`
-
-หากทิศผิด ใช้ **Reverse Direction**
-
----
-
-## 9.4 Bidirectional Path
-
-**Bidirectional Path** หรือ Two-way Path อนุญาตให้ Robot ใช้เส้นเดียวกันได้ทั้งสองทิศ
-
-```text
-A ●←──────────→● B
-```
-
-เหมาะกับ Corridor กว้าง, Aisle ที่สวนกันได้ หรือ Connector route ที่ไม่มี direction restriction
-
-> Two-way ไม่ได้หมายความว่าปลอดภัยเสมอ ควรตรวจ Robot Width + Safety Margin + Passing Clearance เทียบกับความกว้าง aisle จริง
-
----
-
-## 9.5 Restricted Path
-
-**Restricted Path** คือเส้นทางที่มีข้อจำกัดการใช้งาน เช่น:
-
-- เฉพาะ Robot Type บางรุ่น
-- จำกัด Max Speed
-- ใช้เฉพาะ Maintenance
-- ใช้เฉพาะบาง operation
-- จำกัด priority
-
-ตัวอย่าง:
-
-```json
-{
-  "type": "restricted",
-  "maxSpeed": 0.5,
-  "robotTypes": ["TUG-600"]
-}
-```
-
-Backend/Fleet Manager เป็นผู้ enforce policy เหล่านี้จริง
-
----
-
-## สรุป Path Types
-
-| Path Type | ความหมาย | ตัวอย่างการใช้งาน |
-|---|---|---|
-| Normal | เส้นทางมาตรฐาน | Corridor ทั่วไป |
-| Preferred | ควรเลือกก่อน route อื่น | Main transport route |
-| One-way | วิ่งได้ทิศเดียว | Aisle แคบ / traffic loop |
-| Bidirectional | วิ่งได้สองทิศ | Main aisle ที่กว้าง |
-| Restricted | มีข้อจำกัดการใช้งาน | Robot เฉพาะรุ่น / special area |
-
 ## วิธีสร้าง Path
 
 1. เลือก Path Type
 2. คลิกจุดแรก
-3. คลิกจุดต่อ ๆ ไปเพื่อเพิ่ม Vertex
+3. คลิกจุดต่อ ๆ ไปเพื่อเพิ่ม vertex
 4. Double Click หรือ Enter เพื่อ Finish
 5. Esc เพื่อ Cancel
 
-## Path ควรเชื่อมกับ Navigation Object หรือแค่ลากผ่าน?
-
-จุดที่เป็น **task destination หรือ routing decision** ควรเชื่อม topology จริง เช่น Waypoint ที่เป็น Junction, Home, Charging, Docking, Pickup, Drop-off, Waiting และ Parking
-
-ตัวอย่างที่ดี:
+ตัวอย่าง:
 
 ```text
-HOME ●────● WP-001 ────● PICKUP-A
+WP-001 ●────────● WP-002
+                │
+                │
+                ● WP-003
 ```
-
-ถ้า Path แค่ลากผ่าน Pickup แต่ไม่ได้ share vertex/connection ระบบ routing อาจมองว่า Pickup ไม่ได้ connected
 
 ## Path จำเป็นต้องผ่าน Waypoint ทุกจุดหรือไม่?
 
 **ไม่จำเป็น**
 
-Intermediate vertex ใช้ดัดรูป Path ให้ตาม corridor ได้โดยไม่ต้องเป็น Waypoint
+แนวคิด:
+
+```text
+Waypoint = Graph Node
+Path     = Graph Edge
+```
+
+Path สามารถมี intermediate vertex เพื่อบังคับรูปทรงให้ตาม corridor โดย vertex เหล่านั้นไม่จำเป็นต้องเป็น waypoint
 
 ```text
 WP-001 ●
         \
-         ○  ← Path Vertex
+         ●  ← path vertex
           \
-           ○────────● WP-002
+           ●────────● WP-002
 ```
 
-แต่ junction, station หรือ destination ควรเป็น navigation node จริง
+แต่จุดที่เป็น junction, destination, station หรือ routing decision ควรเป็น node และควรให้ path terminate/connect ที่ node นั้น
+
+### แนะนำ
+
+```text
+PATH-001: WP-001 ↔ WP-002
+PATH-002: WP-002 ↔ WP-003
+```
+
+ดีกว่าใช้ path เดียวยาวผ่าน junction ที่ต้องแตกแขนง
 
 ## One-way / Two-way Path
 
-ใน Properties สามารถสลับ:
+โปรแกรมแสดง direction ของ path ให้ชัดเจนทั้งบน Map Canvas, Properties และ Preview
+
+### One-way
+
+เลือก **ONE-WAY** ใน Properties หรือใช้ Path Type `one_way`
+
+```text
+A ● ─────────→ ● B
+```
+
+ความหมายคือ Robot สามารถวิ่งตามลำดับ vertex จากจุดแรกไปจุดสุดท้ายเท่านั้น
+
+ลำดับ click คือ direction:
+
+```text
+A → B → C
+```
+
+บน Map Canvas จะมี:
+
+- ลูกศรทางเดียวบนแต่ละ segment
+- Badge `ONE-WAY  A → B`
+- Properties แสดงสถานะ `ONE-WAY`
+
+หากทิศผิด ให้กด **Reverse Direction** เพื่อกลับลำดับ vertex:
+
+```text
+A → B
+```
+
+เป็น:
+
+```text
+A ← B
+```
+
+### Two-way / Bidirectional
+
+เลือก **TWO-WAY** ใน Properties หรือใช้ Path Type `bidirectional`
+
+```text
+A ● ←────────→ ● B
+```
+
+หมายถึง Robot สามารถใช้ path เดียวกันได้ทั้งสองทิศทาง
+
+บน Map Canvas จะมีลูกศรคู่สวนทาง และ Badge:
+
+```text
+TWO-WAY  A ↔ B
+```
+
+### การสลับทิศจาก Properties
+
+เมื่อ Select Path ทางขวาจะมีส่วน **TRAVEL DIRECTION** พร้อมปุ่ม:
 
 ```text
 [ One-way  A → B ]   [ Two-way  A ↔ B ]
 ```
 
-> ลูกศรบน **Path** = ทิศทางที่ Robot ได้รับอนุญาตให้เดินทาง  
-> ลูกศรบน **Navigation Object** = Heading/Orientation ที่ Robot ควรหันเมื่ออยู่ที่จุดนั้น
+กดเพื่อสลับได้ทันที โดยไม่ต้องลบและสร้าง path ใหม่
+
+> ลูกศรบน **Path** = ทิศทางที่ Robot อนุญาตให้เดินทาง ส่วนลูกศรบน **Waypoint/Station** = Heading/Orientation ของ Robot เมื่ออยู่ที่จุดนั้น ซึ่งเป็นคนละความหมายกัน
 
 ---
 
 # 10. Zones
 
-Zone คือ **พื้นที่ Polygon ที่กำหนดกฎหรือความหมายพิเศษบนแผนที่** เช่น พื้นที่ห้ามเข้า, จำกัดความเร็ว, จำกัด robot, พื้นที่จอด หรือพื้นที่คนเดิน
-
 รองรับ:
 
-- No-Go Zone
-- Slow Zone
-- Restricted Zone
-- Parking Zone
-- Loading Zone
-- Unloading Zone
-- Human Traffic Zone
-- Safety Zone
+- No-Go
+- Slow
+- Restricted
+- Parking
+- Loading
+- Unloading
+- Human Traffic
+- Safety
 
-## 10.1 No-Go Zone
+## วิธีสร้าง
 
-**No-Go Zone** คือพื้นที่ที่ Robot ไม่ควรเข้าโดยเด็ดขาด
+1. เลือก Zone Type
+2. คลิก polygon vertices
+3. ต้องมีอย่างน้อย 3 จุด
+4. Double Click หรือ Enter เพื่อ Finish
+5. Esc เพื่อ Cancel
 
-เหมาะสำหรับ Machine footprint, ชั้นวาง, บันได, Drop edge, พื้นที่อันตราย หรือพื้นที่สงวน
+### No-Go
 
-```text
-┌─────────────────┐
-│   NO-GO ZONE    │
-│    MACHINE      │
-└─────────────────┘
-```
+ใช้กับเครื่องจักร ชั้นวาง บันได พื้นที่อันตราย หรือพื้นที่ห้าม AMR เข้า
 
-Validation สามารถเตือนเมื่อ Path เข้า No-Go Zone
+### Slow
 
----
+เหมาะกับทางแคบ จุดตัด หน้าประตู หรือพื้นที่คนเดิน สามารถตั้ง Max Speed ได้
 
-## 10.2 Slow Zone
+### Human Traffic
 
-**Slow Zone** คือพื้นที่ที่ Robot ยังเข้าได้ แต่ต้องจำกัดความเร็ว
-
-เหมาะกับ:
-
-- ทางแคบ
-- Blind corner
-- หน้าประตู
-- Intersection
-- พื้นที่ใกล้ operator
-- บริเวณก่อน docking
-
-ตัวอย่าง:
-
-```text
-Max Speed = 0.5 m/s
-```
-
-Backend/Fleet สามารถนำค่า speed limit ไป enforce ได้
-
----
-
-## 10.3 Restricted Zone
-
-**Restricted Zone** คือพื้นที่ที่เข้าได้เฉพาะตามเงื่อนไข เช่นเฉพาะ Robot Type, Task, Authorized robot หรือช่วงเวลาที่กำหนด
-
-ใช้เมื่อไม่ต้องการห้ามแบบ No-Go แต่ต้องมี access control
-
----
-
-## 10.4 Parking Zone
-
-**Parking Zone** คือพื้นที่ที่กำหนดไว้สำหรับจอด Robot เช่น Idle parking หรือ Fleet staging area
-
-**ต่างจาก Parking Point:**
-
-- Parking Point = ตำแหน่งจอดเฉพาะจุด
-- Parking Zone = พื้นที่ที่อนุญาตให้ใช้เป็นบริเวณจอด
-
-สามารถใช้ร่วมกันได้ เช่น Parking Zone ครอบ PARK-01, PARK-02 และ PARK-03
-
----
-
-## 10.5 Loading Zone
-
-**Loading Zone** คือพื้นที่สำหรับ operation รับ/โหลดวัสดุ เช่น Pallet loading, Operator loading, Conveyor loading หรือ Material staging ก่อน Pickup
-
-มักใช้ร่วมกับ `Pickup Point`
-
-```text
-┌──── LOADING ZONE ────┐
-│      ● PICKUP-A      │
-└──────────────────────┘
-```
-
----
-
-## 10.6 Unloading Zone
-
-**Unloading Zone** คือพื้นที่สำหรับส่ง/ปล่อยวัสดุ เช่น Drop-off operation, Conveyor unloading, Material handoff หรือ Finished goods delivery
-
-มักใช้ร่วมกับ `Drop-off Point`
-
----
-
-## 10.7 Human Traffic Zone
-
-**Human Traffic Zone** คือพื้นที่ที่มีคนเดินหรือมี interaction ระหว่างคนกับ AMR สูง
-
-เหมาะสำหรับ:
-
-- Pedestrian crossing
-- Walkway
-- ประตูเข้า/ออก
-- จุดรวมคน
-- Production operator area
-- Shared corridor
-
-ข้อมูลนี้อาจใช้ร่วมกับการลด Max Speed, เพิ่ม Safety Margin หรือปรับ route priority
-
-> Human Traffic Zone ไม่ได้ทดแทนระบบ safety จริง เช่น Safety PLC, scanner field หรือ E-stop
-
----
-
-## 10.8 Safety Zone
-
-**Safety Zone** คือพื้นที่ที่ต้องการกำหนดข้อควรระวังพิเศษด้าน safety
-
-เหมาะกับ Hazard buffer, Machine interaction area, จุดที่ต้องเพิ่ม clearance หรือพื้นที่ที่ต้องลด speed เพิ่มเติม
-
-Backend ในอนาคตสามารถตีความ zone นี้เพื่อเพิ่ม clearance, จำกัด speed หรือจำกัด robot type
-
----
-
-## สรุป Zone Types
-
-| Zone | ความหมาย | ตัวอย่าง |
-|---|---|---|
-| No-Go | ห้ามเข้า | Machine / Stair / Hazard |
-| Slow | เข้าได้แต่ลดความเร็ว | Door / Narrow aisle |
-| Restricted | เข้าได้ตามเงื่อนไข | Authorized robots |
-| Parking | พื้นที่จอด | Fleet parking area |
-| Loading | พื้นที่รับ/โหลดของ | Pickup operation |
-| Unloading | พื้นที่ส่ง/ลงของ | Drop-off operation |
-| Human Traffic | พื้นที่คนเดิน | Pedestrian crossing |
-| Safety | พื้นที่ safety พิเศษ | Hazard buffer |
-
-## วิธีสร้าง Zone
-
-1. ไปที่ Tab **Zones**
-2. เลือก Zone Type
-3. คลิก Polygon Vertices
-4. ต้องมีอย่างน้อย 3 จุด
-5. Double Click หรือ Enter เพื่อ Finish
-6. Esc เพื่อ Cancel
-
-หลังสร้างสามารถแก้ Name, Type, Max Speed, Robot Access, Enabled และ Polygon vertices
-
-> หลีกเลี่ยงการสร้าง Zone ซ้อนกันโดยไม่มี policy ชัดเจน เพราะ rule อาจ conflict เช่น Slow Zone ซ้อน No-Go Zone
+ใช้สำหรับพื้นที่ที่คนเดินผ่านบ่อย
 
 ---
 
@@ -1678,3 +1354,35 @@ Path A crosses Path B visually but no topology junction exists.
 ```
 
 หมายความว่าเส้นตัดกันบนภาพ แต่ไม่ได้ share vertex จริง ให้ใช้ Connect หรือแก้ vertex ให้ตรงกันจนเห็นจุด `CONNECTED` สีเขียว
+
+## Custom Export File Name (v0.8.1)
+
+ก่อนดาวน์โหลดไฟล์จาก **Export Map** สามารถกำหนดชื่อไฟล์หลักได้ที่ช่อง **File name**
+
+ตัวอย่างกรอก:
+
+```text
+WB220126_Floor3
+```
+
+ระบบจะเติม suffix และนามสกุลให้ตามประเภท Export อัตโนมัติ เช่น:
+
+```text
+WB220126_Floor3.amrmap
+WB220126_Floor3-ros-map.zip
+WB220126_Floor3.png
+WB220126_Floor3.pgm
+WB220126_Floor3.yaml
+WB220126_Floor3-waypoints.json
+WB220126_Floor3-paths.json
+WB220126_Floor3-zones.json
+WB220126_Floor3-navigation.json
+```
+
+ถ้าเลือก **Export Selected** ระบบจะเพิ่ม `-selected` ก่อน `.json` เช่น:
+
+```text
+WB220126_Floor3-paths-selected.json
+```
+
+ชื่อภาษาไทยสามารถใช้ได้ และระบบจะลบ/แทนที่อักขระที่ไม่เหมาะกับชื่อไฟล์ เช่น `/ \\ : * ? \" < > |` โดยอัตโนมัติ
