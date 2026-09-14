@@ -1442,3 +1442,94 @@ drawing:
 ดังนั้นถ้าต้องการเปิดใน Traffic Editor พร้อมภาพพื้นหลัง ให้ Export **Occupancy PNG** ด้วยชื่อ base เดียวกันแล้ววาง `.building.yaml` และ `.png` ไว้ในโฟลเดอร์เดียวกัน
 
 > หมายเหตุ: Export นี้เน้น Navigation Graph/Vertices/Lanes จาก AMR Map Editor ยังไม่ได้สร้าง walls, doors, lifts, models หรือ simulation geometry แบบเต็มของ Traffic Editor
+
+---
+
+# RMF Building Geometry (v0.10.0)
+
+เวอร์ชันนี้เพิ่ม Building tab สำหรับสร้างข้อมูลที่ใช้ใน Open-RMF `.building.yaml` โดยตรง ได้แก่ **Wall, Door, Floor Area, Model และ Measurement** นอกเหนือจาก Navigation Objects และ Paths เดิม
+
+## Wall
+
+เลือก `Building → Wall` แล้วคลิก 2 จุดบนแผนที่ จากนั้นเลือก Wall เพื่อแก้ Properties:
+
+- Start / End X,Y
+- Texture Name
+- Texture Height
+- Texture Width
+- Texture Scale
+- Alpha
+- Enabled
+
+Exporter จะสร้างรายการ `walls` ที่อ้างอิง vertex indices และ parameters เช่น `alpha`, `texture_height`, `texture_name`, `texture_scale`, `texture_width`.
+
+## Door
+
+เลือก `Building → Door` แล้วคลิก 2 จุด สามารถกำหนด:
+
+- Name
+- Door Type: hinged / double_hinged / sliding / double_sliding
+- Motion Axis: start / end
+- Motion Degrees
+- Motion Direction: 1 / -1
+- Plugin
+- Right/Left Ratio
+
+ข้อมูลถูก export ไปยัง `doors` ใน `.building.yaml`.
+
+## Floor Area
+
+เลือก `Building → Floor Area` คลิกอย่างน้อย 3 vertices แล้วกด Enter หรือ Double Click เพื่อปิด polygon
+
+Properties:
+
+- Texture Name
+- Texture Scale
+- Texture Rotation
+- Ceiling Texture
+- Ceiling Scale
+- Indoor
+
+## Model
+
+เลือก `Building → Model` แล้วคลิกตำแหน่งที่ต้องการวาง สามารถกำหนด `model_name`, name, X/Y, Yaw, Z, Static และ Dispensable.
+
+## Measurement
+
+เลือก `Building → Measurement` แล้วคลิก 2 จุด ระบบคำนวณระยะจริงเป็นเมตรอัตโนมัติ และสามารถแก้ Distance ได้ใน Properties ก่อน export.
+
+## Building / Level Properties
+
+ใน Properties มีส่วน **RMF BUILDING / LEVEL** สำหรับกำหนด:
+
+- Building Name
+- Level Name
+- Reference Level
+- Elevation (m)
+
+## `.building.yaml` ที่ Export
+
+ไฟล์ที่ได้มีโครงสร้างหลัก:
+
+```yaml
+name: Factory
+reference_level_name: L1
+coordinate_system: cartesian_meters
+levels:
+  L1:
+    elevation: 0
+    drawing:
+      filename: Factory.png
+    doors: []
+    floors: []
+    lanes: []
+    measurements: []
+    models: []
+    vertices: []
+    walls: []
+lifts: {}
+```
+
+Navigation Objects จะถูกแปลงเป็น named vertices และ Paths เป็น lanes เช่นเดิม ส่วน Building tab จะเติม walls / doors / floors / models / measurements.
+
+> ปัจจุบัน editor เป็น single-level workflow และ `lifts` ยัง export เป็น `{}`. การทำ multi-level + lift editor ควรเป็น phase ถัดไป เพราะ lift ต้องผูกหลาย level และ door pairs เข้าด้วยกัน.

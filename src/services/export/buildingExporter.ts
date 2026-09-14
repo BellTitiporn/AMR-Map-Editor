@@ -1,10 +1,11 @@
 import YAML from 'yaml';
-import type { MapMetadata, NavigationObject, NavigationPath } from '../../models';
+import type { BuildingData, MapMetadata, NavigationObject, NavigationPath } from '../../models';
 import { downloadTextFile, exportBaseName } from '../../utils/files';
 
 type RmfParam = [1 | 2 | 3 | 4, string | number | boolean];
 type RmfVertex = [number, number, number, string, Record<string, RmfParam>];
 type RmfLane = [number, number, Record<string, RmfParam>];
+type RmfEdge = [number, number, Record<string, RmfParam>];
 
 const STRING = 1 as const;
 const INT = 2 as const;
@@ -32,21 +33,19 @@ function samePoint(a: {x:number;y:number}, b: {x:number;y:number}) {
 export interface BuildingYamlOptions {
   buildingName?: string;
   levelName?: string;
+  referenceLevelName?: string;
+  elevation?: number;
   drawingFilename?: string;
 }
 
-/**
- * Generate an Open-RMF Traffic Editor style .building.yaml navigation skeleton.
- * Coordinates are exported directly in meters using coordinate_system: cartesian_meters.
- * Navigation objects become named vertices and each path segment becomes a lane.
- */
 export function buildingPayload(
   metadata: MapMetadata,
   objects: NavigationObject[],
   paths: NavigationPath[],
+  building: BuildingData,
   options: BuildingYamlOptions = {},
 ) {
-  const levelName = options.levelName || 'L1';
+  const levelName = options.levelName || building.config.levelName || 'L1';
   const vertices: RmfVertex[] = [];
 
   const findOrAdd = (point: {x:number;y:number}, name = '', params: Record<string, RmfParam> = {}) => {
@@ -82,48 +81,92 @@ export function buildingPayload(
     }
   }
 
+  const walls: RmfEdge[] = building.walls.filter(w => w.enabled).map(w => [
+    findOrAdd(w.start), findOrAdd(w.end), {
+      alpha: [DOUBLE, w.alpha],
+      texture_height: [DOUBLE, w.textureHeight],
+      texture_name: [STRING, w.textureName],
+      texture_scale: [DOUBLE, w.textureScale],
+      texture_width: [DOUBLE, w.textureWidth],
+      amr_wall_id: [STRING, w.id],
+    }
+  ]);
+
+  const doors: RmfEdge[] = building.doors.filter(d => d.enabled).map(d => [
+    findOrAdd(d.start), findOrAdd(d.end), {
+      motion_axis: [STRING, d.motionAxis],
+      motion_degrees: [DOUBLE, d.motionDegrees],
+      motion_direction: [INT, d.motionDirection],
+      name: [STRING, d.name],
+      plugin: [STRING, d.plugin],
+      right_left_ratio: [DOUBLE, d.rightLeftRatio],
+      type: [STRING, d.type],
+      amr_door_id: [STRING, d.id],
+    }
+  ]);
+
+  const floors = building.floors.filter(f => f.enabled && f.polygon.length >= 3).map(f => ({
+    parameters: {
+      ceiling_scale: [DOUBLE, f.ceilingScale] as RmfParam,
+      ceiling_texture: [STRING, f.ceilingTexture] as RmfParam,
+      indoor: [INT, f.indoor ? 1 : 0] as RmfParam,
+      texture_name: [STRING, f.textureName] as RmfParam,
+      texture_rotation: [DOUBLE, f.textureRotation] as RmfParam,
+      texture_scale: [DOUBLE, f.textureScale] as RmfParam,
+      amr_floor_name: [STRING, f.name] as RmfParam,
+    },
+    vertices: f.polygon.map(point => findOrAdd(point)),
+  }));
+
+  const measurements: RmfEdge[] = building.measurements.filter(m => m.enabled).map(m => [
+    findOrAdd(m.start), findOrAdd(m.end), { distance: [DOUBLE, m.distance], amr_measurement_name: [STRING, m.name] }
+  ]);
+
+  const models = building.models.filter(m => m.enabled).map(m => ({
+    dispensable: m.dispensable,
+    model_name: m.modelName,
+    name: m.name,
+    static: m.static,
+    x: m.x,
+    y: m.y,
+    yaw: m.yaw,
+    z: m.z,
+  }));
+
   return {
-    name: options.buildingName || metadata.name || 'AMR_Map',
-    reference_level_name: levelName,
+    name: options.buildingName || building.config.buildingName || metadata.name || 'AMR_Map',
+    reference_level_name: options.referenceLevelName || building.config.referenceLevelName || levelName,
     coordinate_system: 'cartesian_meters',
     levels: {
       [levelName]: {
-        elevation: 0,
+        elevation: options.elevation ?? building.config.elevation ?? 0,
         drawing: { filename: options.drawingFilename || '' },
-        doors: [],
+        doors,
         fiducials: [],
-        floors: [],
+        floors,
         lanes,
         layers: {},
-        measurements: [],
-        models: [],
+        measurements,
+        models,
         vertices,
-        walls: [],
+        walls,
       },
     },
     lifts: {},
   };
 }
 
-export function generateBuildingYaml(
-  metadata: MapMetadata,
-  objects: NavigationObject[],
-  paths: NavigationPath[],
-  options: BuildingYamlOptions = {},
-) {
-  return YAML.stringify(buildingPayload(metadata, objects, paths, options));
+export function generateBuildingYaml(metadata:MapMetadata,objects:NavigationObject[],paths:NavigationPath[],building:BuildingData,options:BuildingYamlOptions={}) {
+  return YAML.stringify(buildingPayload(metadata, objects, paths, building, options));
 }
 
-export function downloadBuildingYaml(
-  metadata: MapMetadata,
-  objects: NavigationObject[],
-  paths: NavigationPath[],
-  fileName = 'map',
-) {
+export function downloadBuildingYaml(metadata:MapMetadata,objects:NavigationObject[],paths:NavigationPath[],building:BuildingData,fileName='map') {
   const base = exportBaseName(fileName, 'map');
-  const text = generateBuildingYaml(metadata, objects, paths, {
-    buildingName: metadata.name || base,
-    levelName: 'L1',
+  const text = generateBuildingYaml(metadata, objects, paths, building, {
+    buildingName: building.config.buildingName || metadata.name || base,
+    levelName: building.config.levelName || 'L1',
+    referenceLevelName: building.config.referenceLevelName || building.config.levelName || 'L1',
+    elevation: building.config.elevation,
     drawingFilename: `${base}.png`,
   });
   downloadTextFile(text, `${base}.building.yaml`, 'application/yaml;charset=utf-8');

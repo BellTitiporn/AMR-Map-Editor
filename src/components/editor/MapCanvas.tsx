@@ -30,6 +30,7 @@ export function MapCanvas() {
   const paintBusy = useRef(false);
   const clipboard = useRef<{kind:'object'|'path'|'zone'; value: unknown} | null>(null);
   const [drawing, setDrawing] = useState<{kind:'path'|'zone'; points: Point[]} | null>(null);
+  const [buildingDrawing, setBuildingDrawing] = useState<{kind:'wall'|'door'|'floor'|'measurement'; points: Point[]} | null>(null);
   const [brushDrag, setBrushDrag] = useState<BrushDrag | null>(null);
   const [brushPolygon, setBrushPolygon] = useState<Point[]>([]);
   const [measure, setMeasure] = useState<Point[]>([]);
@@ -121,6 +122,7 @@ export function MapCanvas() {
         else { const z=structuredClone(c.value) as typeof p.zones[number];z.id=z.id+'-'+crypto.randomUUID().slice(0,4);z.name+=' Copy';z.polygon=z.polygon.map(q=>({x:q.x+.5,y:q.y+.5}));p.addZone(z);e.setSelection([z.id]); }
       } else if (x.key === 'Enter') {
         if (e.tool === 'brush' && e.brushShape === 'polygon') void finishBrushPolygon();
+        else if (e.tool === 'building' && e.buildingTool === 'floor') finishBuildingFloor();
         else finishPathOrZone();
       } else if ((x.key === 'Delete' || x.key === 'Backspace') && e.selectedPathPoint) {
         x.preventDefault();
@@ -134,7 +136,7 @@ export function MapCanvas() {
       } else if (x.key === 'Delete' && e.selection.length) {
         p.commit(); p.deleteIds(e.selection); e.setSelection([]);
       } else if (x.key === 'Escape') {
-        setDrawing(null); setMeasure([]); setBrushDrag(null); setBrushPolygon([]); e.setTool('select');
+        setDrawing(null); setBuildingDrawing(null); setMeasure([]); setBrushDrag(null); setBrushPolygon([]); e.setTool('select');
       } else if (!m) {
         const map: Record<string, typeof e.tool> = {v:'select',h:'pan',b:'brush',e:'eraser',p:'path',z:'zone',m:'measure'};
         const t = map[keyName]; if (t) e.setTool(t);
@@ -171,8 +173,31 @@ export function MapCanvas() {
     } finally { paintBusy.current = false; }
   };
 
+
+  const finishBuildingFloor = () => {
+    if (!buildingDrawing || buildingDrawing.kind !== 'floor' || buildingDrawing.points.length < 3) return;
+    p.commit(); const id=`FLOOR-${crypto.randomUUID().slice(0,6)}`;
+    p.addFloor({id,name:id,polygon:buildingDrawing.points,enabled:true,textureName:'blue_linoleum_high_contrast',textureScale:1,textureRotation:0,ceilingTexture:'blue_linoleum_high_contrast',ceilingScale:1,indoor:true});
+    e.setSelection([id]); setBuildingDrawing(null); e.setBuildingTool(null);
+  };
+
+  const addBuildingPoint = (w: Point) => {
+    const kind=e.buildingTool; if (!kind) return;
+    if (kind==='model') { p.commit(); const id=`MODEL-${crypto.randomUUID().slice(0,6)}`; p.addModel({id,name:id,modelName:'OpenRobotics/OfficeChairBlack',x:w.x,y:w.y,yaw:0,z:0,static:true,dispensable:false,enabled:true}); e.setSelection([id]); e.setBuildingTool(null); return; }
+    const current=buildingDrawing?.kind===kind?buildingDrawing.points:[]; const points=[...current,w];
+    if ((kind==='wall'||kind==='door'||kind==='measurement') && points.length===2) {
+      p.commit(); const id=`${kind.toUpperCase()}-${crypto.randomUUID().slice(0,6)}`;
+      if(kind==='wall') p.addWall({id,name:id,start:points[0],end:points[1],enabled:true,alpha:1,textureName:'wall_white',textureScale:1,textureWidth:1,textureHeight:2.5});
+      if(kind==='door') p.addDoor({id,name:id,start:points[0],end:points[1],enabled:true,type:'hinged',motionAxis:'start',motionDegrees:90,motionDirection:1,plugin:'normal',rightLeftRatio:1});
+      if(kind==='measurement') p.addMeasurement({id,name:id,start:points[0],end:points[1],distance:distance(points[0],points[1]),enabled:true});
+      e.setSelection([id]); setBuildingDrawing(null); e.setBuildingTool(null); return;
+    }
+    setBuildingDrawing({kind:kind as 'wall'|'door'|'floor'|'measurement',points});
+  };
+
   const click = (evt: any) => {
     const w = pointerWorld(evt); e.setCursor(w);
+    if (e.tool === 'building' && e.buildingTool) { addBuildingPoint(w); return; }
     if (e.tool === 'brush' && e.brushShape === 'polygon') {
       setBrushPolygon(points => [...points, w]);
       return;
@@ -190,6 +215,7 @@ export function MapCanvas() {
 
   const dbl = () => {
     if (e.tool === 'brush' && e.brushShape === 'polygon') { void finishBrushPolygon(); return; }
+    if (e.tool === 'building' && e.buildingTool === 'floor') { finishBuildingFloor(); return; }
     finishPathOrZone();
   };
 
@@ -238,6 +264,15 @@ export function MapCanvas() {
         {e.layers.grid.visible&&<Grid width={p.metadata.width} height={p.metadata.height} scale={e.viewport.scale}/>}
         <Origin scale={e.viewport.scale}/>
       </Layer>
+
+      {e.layers.building.visible&&<Layer>
+        {p.building.floors.map(f=>{const pts=f.polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={f.id}><Line points={pts} closed fill="rgba(148,163,184,.14)" stroke={e.selection.includes(f.id)?'#0284c7':'#94a3b8'} strokeWidth={(e.selection.includes(f.id)?3:1.5)/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([f.id])}}/>{e.layers.labels.visible&&pts.length>=2&&<Text x={pts[0]+4} y={pts[1]+4} text={f.name} fontSize={9/e.viewport.scale} fill="#475569"/>}</Group>})}
+        {p.building.walls.map(w=>{const a=worldToPixel(w.start.x,w.start.y,p.metadata),b=worldToPixel(w.end.x,w.end.y,p.metadata);return <Line key={w.id} points={[a.x,a.y,b.x,b.y]} stroke={e.selection.includes(w.id)?'#0284c7':'#334155'} strokeWidth={(e.selection.includes(w.id)?5:3)/e.viewport.scale} hitStrokeWidth={12/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([w.id])}}/>})}
+        {p.building.doors.map(d=>{const a=worldToPixel(d.start.x,d.start.y,p.metadata),b=worldToPixel(d.end.x,d.end.y,p.metadata);return <Group key={d.id}><Line points={[a.x,a.y,b.x,b.y]} stroke={e.selection.includes(d.id)?'#0284c7':'#f59e0b'} strokeWidth={4/e.viewport.scale} dash={[7/e.viewport.scale,3/e.viewport.scale]} hitStrokeWidth={12/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([d.id])}}/>{e.layers.labels.visible&&<Text x={(a.x+b.x)/2} y={(a.y+b.y)/2-12/e.viewport.scale} text={d.name} fontSize={9/e.viewport.scale} fill="#92400e"/>}</Group>})}
+        {p.building.models.map(m=>{const v=worldToPixel(m.x,m.y,p.metadata);return <Group key={m.id} x={v.x} y={v.y} onClick={ev=>{ev.cancelBubble=true;e.setSelection([m.id])}}><Rect x={-6/e.viewport.scale} y={-6/e.viewport.scale} width={12/e.viewport.scale} height={12/e.viewport.scale} fill="#7c3aed" stroke={e.selection.includes(m.id)?'#0284c7':'#5b21b6'} strokeWidth={2/e.viewport.scale}/>{e.layers.labels.visible&&<Text x={8/e.viewport.scale} y={-7/e.viewport.scale} text={m.name} fontSize={9/e.viewport.scale} fill="#5b21b6"/>}</Group>})}
+        {p.building.measurements.map(m=>{const a=worldToPixel(m.start.x,m.start.y,p.metadata),b=worldToPixel(m.end.x,m.end.y,p.metadata);return <Group key={m.id}><Line points={[a.x,a.y,b.x,b.y]} stroke={e.selection.includes(m.id)?'#0284c7':'#16a34a'} dash={[5/e.viewport.scale,3/e.viewport.scale]} strokeWidth={2/e.viewport.scale} hitStrokeWidth={10/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([m.id])}}/><Text x={(a.x+b.x)/2} y={(a.y+b.y)/2} text={`${m.distance.toFixed(2)} m`} fontSize={9/e.viewport.scale} fill="#166534"/></Group>})}
+        {buildingDrawing&&<Line points={buildingDrawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={buildingDrawing.kind==='floor'&&buildingDrawing.points.length>2} stroke="#0284c7" dash={[6/e.viewport.scale,4/e.viewport.scale]} fill={buildingDrawing.kind==='floor'?'rgba(2,132,199,.08)':undefined} strokeWidth={2/e.viewport.scale}/>}
+      </Layer>}
 
       {e.layers.zones.visible&&<Layer>{p.zones.map(z=>{const pts=z.polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={z.id}><Line points={pts} closed fill={zoneFill[z.type]} stroke={e.selection.includes(z.id)?'#0ea5e9':'#8b5e34'} strokeWidth={(e.selection.includes(z.id)?3:1.5)/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([z.id])}}/>{e.layers.labels.visible&&<Text x={pts[0]+5} y={pts[1]+5} text={z.name} fontSize={11/e.viewport.scale} fill="#684c2e"/>}{e.selection.includes(z.id)&&!e.layers.zones.locked&&z.polygon.map((q,i)=>{const v=worldToPixel(q.x,q.y,p.metadata);return <Circle key={i} x={v.x} y={v.y} radius={5/e.viewport.scale} fill="#fff" stroke="#0ea5e9" strokeWidth={2/e.viewport.scale} draggable onDragStart={()=>p.commit()} onDragEnd={ev=>{const poly=[...z.polygon];poly[i]=pixelToWorld(ev.target.x(),ev.target.y(),p.metadata);p.updateZone(z.id,{polygon:poly})}}/>})}</Group>})}</Layer>}
 
@@ -335,6 +370,7 @@ function PathDirectionOverlay({ path, metadata, scale, showBadge }: { path: Navi
 
 function canvasHint(tool: string, brushShape: string, brushSize: number, placement: string | null, measureMode: string) {
   if (tool==='path'||tool==='zone') return 'Click to add points • Double-click/Enter to finish • Esc to cancel';
+  if (tool==='building') return 'RMF Building tool • Wall/Door/Measurement: 2 points • Floor: 3+ points + Enter • Model: 1 point';
   if (tool==='measure') return `${measureMode==='area'?'Area':'Distance'} measurement • Click points • Clear to restart`;
   if (tool==='pan') return 'Drag to pan • Wheel to zoom';
   if (tool==='eraser') return `Drag to restore original map pixels • ${brushSize} px`;

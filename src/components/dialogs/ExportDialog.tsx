@@ -25,9 +25,7 @@ export function ExportDialog({onClose}:{onClose:()=>void}){
       else if(type==='paths')downloadPaths(ps,`${base}-paths${selectedSuffix}.json`);
       else if(type==='zones')downloadZones(zs,`${base}-zones${selectedSuffix}.json`);
       else if(type==='navigation')downloadNavigation(p.metadata,os,ps,zs,[p.robot],`${base}-navigation${selectedSuffix}.json`);
-      else if(type==='building'){
-        downloadBuildingYaml(p.metadata, p.objects, p.paths, base);
-      }
+      else if(type==='building')downloadBuildingYaml(p.metadata,p.objects,p.paths,p.building,base);
       else{
         if(!p.image)throw new Error('No occupancy map image is loaded.');
         if(type==='ros')await exportRosZip(p.metadata,p.image,base);

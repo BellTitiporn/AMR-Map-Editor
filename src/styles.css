@@ -139,3 +139,6 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .brushcolorlabel{border-left:1px solid var(--border,#d5dee8);margin-left:2px;padding-left:8px!important}
 .brushcolorlabel input[type="color"]{width:30px;height:24px;padding:1px;border:1px solid #b9c7d5;background:#fff;border-radius:2px;cursor:pointer}
 .brushcolorlabel code{font-size:9px;color:#5d7183;min-width:54px}
+
+/* RMF Building editor */
+.sidebar-help{margin:12px 8px;padding:9px;border:1px solid #cbd5e1;background:#f8fafc;color:#64748b;font-size:11px;line-height:1.45}

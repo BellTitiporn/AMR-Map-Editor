@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeftRight, ArrowRight, CircleCheck, GitMerge, Link2, Copy, RotateCcw, Trash2 } from 'lucide-react';
 import { useEditorStore } from '../../state/editorStore';
 import { useProjectStore } from '../../state/projectStore';
-import type { NavigationObject, NavigationPath, PathType, ZoneType } from '../../models';
+import type { BuildingDoorType, NavigationObject, NavigationPath, PathType, ZoneType } from '../../models';
 import { degreesToRadians, headingLabel, normalizeAngle, normalizeDegrees, radiansToDegrees } from '../../geometry/angles';
 import { connectPathEndpoint, DEFAULT_PATH_SNAP_DISTANCE_M, endpointConnectionStatus, findNearestMergeCandidate, mergeWithNearestPath } from '../../geometry/pathTopology';
 
@@ -16,6 +16,11 @@ export function Inspector() {
   const object = p.objects.find(x => x.id === id);
   const path = p.paths.find(x => x.id === id);
   const zone = p.zones.find(x => x.id === id);
+  const wall = p.building.walls.find(x => x.id === id);
+  const door = p.building.doors.find(x => x.id === id);
+  const floor = p.building.floors.find(x => x.id === id);
+  const buildingModel = p.building.models.find(x => x.id === id);
+  const buildingMeasurement = p.building.measurements.find(x => x.id === id);
   const rounded = (v: number) => Number(v.toFixed(3));
   const begin = () => p.commit();
 
@@ -23,6 +28,7 @@ export function Inspector() {
     return <aside className="inspector">
       <div className="inspector-title">PROPERTIES</div>
       <div className="empty">Select an object, path, or zone to inspect properties.</div>
+      <BuildingConfig />
       <RobotConfig />
     </aside>;
   }
@@ -82,6 +88,38 @@ export function Inspector() {
       </div>
       <RobotConfig />
     </aside>;
+  }
+
+  if (wall) {
+    return <aside className="inspector"><div className="inspector-title">WALL PROPERTIES</div>
+      <Field l="Name" v={wall.name} begin={begin} on={v=>p.updateWall(wall.id,{name:v})}/>
+      <div className="twocol"><NumberField l="Start X" v={rounded(wall.start.x)} begin={begin} on={v=>p.updateWall(wall.id,{start:{...wall.start,x:v}})}/><NumberField l="Start Y" v={rounded(wall.start.y)} begin={begin} on={v=>p.updateWall(wall.id,{start:{...wall.start,y:v}})}/></div>
+      <div className="twocol"><NumberField l="End X" v={rounded(wall.end.x)} begin={begin} on={v=>p.updateWall(wall.id,{end:{...wall.end,x:v}})}/><NumberField l="End Y" v={rounded(wall.end.y)} begin={begin} on={v=>p.updateWall(wall.id,{end:{...wall.end,y:v}})}/></div>
+      <Field l="Texture" v={wall.textureName} begin={begin} on={v=>p.updateWall(wall.id,{textureName:v})}/>
+      <div className="twocol"><NumberField l="Height (m)" v={wall.textureHeight} begin={begin} on={v=>v>0&&p.updateWall(wall.id,{textureHeight:v})}/><NumberField l="Width" v={wall.textureWidth} begin={begin} on={v=>v>0&&p.updateWall(wall.id,{textureWidth:v})}/></div>
+      <div className="twocol"><NumberField l="Texture Scale" v={wall.textureScale} begin={begin} on={v=>v>0&&p.updateWall(wall.id,{textureScale:v})}/><NumberField l="Alpha" v={wall.alpha} step={.1} begin={begin} on={v=>v>=0&&v<=1&&p.updateWall(wall.id,{alpha:v})}/></div>
+      <label className="check"><input type="checkbox" checked={wall.enabled} onChange={x=>p.updateWall(wall.id,{enabled:x.target.checked})}/> Enabled</label><div className="actions"><button className="danger" onClick={()=>remove(wall.id)}><Trash2/>Delete</button></div><BuildingConfig/></aside>;
+  }
+  if (door) {
+    return <aside className="inspector"><div className="inspector-title">DOOR PROPERTIES</div>
+      <Field l="Name" v={door.name} begin={begin} on={v=>p.updateDoor(door.id,{name:v})}/>
+      <SelectField l="Door Type" v={door.type} options={['hinged','double_hinged','sliding','double_sliding']} begin={begin} on={v=>p.updateDoor(door.id,{type:v as BuildingDoorType})}/>
+      <SelectField l="Motion Axis" v={door.motionAxis} options={['start','end']} begin={begin} on={v=>p.updateDoor(door.id,{motionAxis:v as 'start'|'end'})}/>
+      <div className="twocol"><NumberField l="Motion Degrees" v={door.motionDegrees} begin={begin} on={v=>p.updateDoor(door.id,{motionDegrees:v})}/><SelectField l="Direction" v={String(door.motionDirection)} options={['1','-1']} begin={begin} on={v=>p.updateDoor(door.id,{motionDirection:v==='-1'?-1:1})}/></div>
+      <Field l="Plugin" v={door.plugin} begin={begin} on={v=>p.updateDoor(door.id,{plugin:v})}/><NumberField l="Right/Left Ratio" v={door.rightLeftRatio} begin={begin} on={v=>v>0&&p.updateDoor(door.id,{rightLeftRatio:v})}/>
+      <label className="check"><input type="checkbox" checked={door.enabled} onChange={x=>p.updateDoor(door.id,{enabled:x.target.checked})}/> Enabled</label><div className="actions"><button className="danger" onClick={()=>remove(door.id)}><Trash2/>Delete</button></div><BuildingConfig/></aside>;
+  }
+  if (floor) {
+    return <aside className="inspector"><div className="inspector-title">FLOOR PROPERTIES</div>
+      <Field l="Name" v={floor.name} begin={begin} on={v=>p.updateFloor(floor.id,{name:v})}/><Field l="Texture" v={floor.textureName} begin={begin} on={v=>p.updateFloor(floor.id,{textureName:v})}/><Field l="Ceiling Texture" v={floor.ceilingTexture} begin={begin} on={v=>p.updateFloor(floor.id,{ceilingTexture:v})}/>
+      <div className="twocol"><NumberField l="Texture Scale" v={floor.textureScale} begin={begin} on={v=>v>0&&p.updateFloor(floor.id,{textureScale:v})}/><NumberField l="Rotation" v={floor.textureRotation} begin={begin} on={v=>p.updateFloor(floor.id,{textureRotation:v})}/></div><NumberField l="Ceiling Scale" v={floor.ceilingScale} begin={begin} on={v=>v>0&&p.updateFloor(floor.id,{ceilingScale:v})}/>
+      <label className="check"><input type="checkbox" checked={floor.indoor} onChange={x=>p.updateFloor(floor.id,{indoor:x.target.checked})}/> Indoor</label><label className="check"><input type="checkbox" checked={floor.enabled} onChange={x=>p.updateFloor(floor.id,{enabled:x.target.checked})}/> Enabled</label><div className="kv"><span>Vertices</span><b>{floor.polygon.length}</b></div><div className="actions"><button className="danger" onClick={()=>remove(floor.id)}><Trash2/>Delete</button></div><BuildingConfig/></aside>;
+  }
+  if (buildingModel) {
+    return <aside className="inspector"><div className="inspector-title">MODEL PROPERTIES</div><Field l="Name" v={buildingModel.name} begin={begin} on={v=>p.updateModel(buildingModel.id,{name:v})}/><Field l="Model Name" v={buildingModel.modelName} begin={begin} on={v=>p.updateModel(buildingModel.id,{modelName:v})}/><div className="twocol"><NumberField l="X" v={rounded(buildingModel.x)} begin={begin} on={v=>p.updateModel(buildingModel.id,{x:v})}/><NumberField l="Y" v={rounded(buildingModel.y)} begin={begin} on={v=>p.updateModel(buildingModel.id,{y:v})}/></div><div className="twocol"><NumberField l="Yaw (rad)" v={buildingModel.yaw} begin={begin} on={v=>p.updateModel(buildingModel.id,{yaw:v})}/><NumberField l="Z" v={buildingModel.z} begin={begin} on={v=>p.updateModel(buildingModel.id,{z:v})}/></div><label className="check"><input type="checkbox" checked={buildingModel.static} onChange={x=>p.updateModel(buildingModel.id,{static:x.target.checked})}/> Static</label><label className="check"><input type="checkbox" checked={buildingModel.dispensable} onChange={x=>p.updateModel(buildingModel.id,{dispensable:x.target.checked})}/> Dispensable</label><div className="actions"><button className="danger" onClick={()=>remove(buildingModel.id)}><Trash2/>Delete</button></div><BuildingConfig/></aside>;
+  }
+  if (buildingMeasurement) {
+    return <aside className="inspector"><div className="inspector-title">MEASUREMENT PROPERTIES</div><Field l="Name" v={buildingMeasurement.name} begin={begin} on={v=>p.updateMeasurement(buildingMeasurement.id,{name:v})}/><NumberField l="Distance (m)" v={buildingMeasurement.distance} begin={begin} on={v=>v>0&&p.updateMeasurement(buildingMeasurement.id,{distance:v})}/><div className="actions"><button className="danger" onClick={()=>remove(buildingMeasurement.id)}><Trash2/>Delete</button></div><BuildingConfig/></aside>;
   }
 
   return null;
@@ -299,6 +337,9 @@ function NumberField({ l, v, on, begin, step = .05 }: { l: string; v: number; on
 function SelectField({ l, v, options, on, begin }: { l: string; v: string; options: string[]; on: (x: string) => void; begin?: () => void }) {
   return <label className="field"><span>{l}</span><select value={v} onFocus={begin} onChange={e => on(e.target.value)}>{options.map(x => <option key={x} value={x}>{x.replaceAll('_', ' ')}</option>)}</select></label>;
 }
+
+
+function BuildingConfig(){const p=useProjectStore();const b=p.building.config;const begin=()=>p.commit();return <div className="robotcfg"><div className="group-title">RMF BUILDING / LEVEL</div><Field l="Building Name" v={b.buildingName} begin={begin} on={v=>p.updateBuildingConfig({buildingName:v})}/><div className="twocol"><Field l="Level" v={b.levelName} begin={begin} on={v=>p.updateBuildingConfig({levelName:v})}/><Field l="Reference Level" v={b.referenceLevelName} begin={begin} on={v=>p.updateBuildingConfig({referenceLevelName:v})}/></div><NumberField l="Elevation (m)" v={b.elevation} begin={begin} on={v=>p.updateBuildingConfig({elevation:v})}/><div className="robotnote">Used by RMF .building.yaml export.</div></div>}
 
 function RobotConfig() {
   const p = useProjectStore();
