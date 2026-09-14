@@ -12,6 +12,12 @@ const zoneFill: Record<string, string> = {
   human_traffic: 'rgba(250,204,21,.22)', safety: 'rgba(34,197,94,.22)'
 };
 
+const WALL_COLOR = '#d97706';
+const DOOR_COLOR = '#0f766e';
+const FLOOR_STROKE = '#2563eb';
+const MODEL_COLOR = '#7c3aed';
+const MEASUREMENT_COLOR = '#64748b';
+
 
 function PreviewPathDirection({ path, metadata, scale }: { path: NavigationPath; metadata: MapMetadata; scale: number }) {
   if (path.type !== 'one_way' && path.type !== 'bidirectional') return null;
@@ -81,6 +87,42 @@ export function PreviewDialog({ onClose }: { onClose: () => void }) {
               {image && <KonvaImage image={image} width={p.metadata.width} height={p.metadata.height}/>}
             </Layer>
             <Layer listening={false}>
+              {p.building.floors.filter(f => f.enabled).map(floor => {
+                const pts = floor.polygon.flatMap(q => { const v = worldToPixel(q.x, q.y, p.metadata); return [v.x, v.y]; });
+                if (pts.length < 6) return null;
+                return <Group key={floor.id}>
+                  <Line points={pts} closed fill="rgba(37,99,235,.10)" stroke={FLOOR_STROKE} strokeWidth={1.5 / fit.scale} lineJoin="round" />
+                  <Text x={pts[0] + 5 / fit.scale} y={pts[1] + 5 / fit.scale} text={floor.name} fontSize={10 / fit.scale} fill="#1d4ed8" />
+                </Group>;
+              })}
+              {p.building.walls.filter(w => w.enabled).map(wall => {
+                const a = worldToPixel(wall.start.x, wall.start.y, p.metadata);
+                const b = worldToPixel(wall.end.x, wall.end.y, p.metadata);
+                return <Line key={wall.id} points={[a.x, a.y, b.x, b.y]} stroke={WALL_COLOR} strokeWidth={3 / fit.scale} lineCap="round" lineJoin="round" />;
+              })}
+              {p.building.doors.filter(d => d.enabled).map(door => {
+                const a = worldToPixel(door.start.x, door.start.y, p.metadata);
+                const b = worldToPixel(door.end.x, door.end.y, p.metadata);
+                return <Group key={door.id}>
+                  <Line points={[a.x, a.y, b.x, b.y]} stroke={DOOR_COLOR} strokeWidth={4 / fit.scale} lineCap="round" />
+                  <Text x={(a.x+b.x)/2 + 4/fit.scale} y={(a.y+b.y)/2 - 14/fit.scale} text={door.name} fontSize={9/fit.scale} fill={DOOR_COLOR} />
+                </Group>;
+              })}
+              {p.building.models.filter(m => m.enabled).map(model => {
+                const v = worldToPixel(model.x, model.y, p.metadata);
+                return <Group key={model.id} x={v.x} y={v.y} rotation={-model.yaw * 180 / Math.PI}>
+                  <Rect x={-6/fit.scale} y={-6/fit.scale} width={12/fit.scale} height={12/fit.scale} fill="rgba(124,58,237,.18)" stroke={MODEL_COLOR} strokeWidth={1.5/fit.scale} />
+                  <Text text={model.name} x={8/fit.scale} y={-14/fit.scale} fontSize={9/fit.scale} fill={MODEL_COLOR} rotation={model.yaw * 180 / Math.PI}/>
+                </Group>;
+              })}
+              {p.building.measurements.filter(m => m.enabled).map(measurement => {
+                const a = worldToPixel(measurement.start.x, measurement.start.y, p.metadata);
+                const b = worldToPixel(measurement.end.x, measurement.end.y, p.metadata);
+                return <Group key={measurement.id}>
+                  <Line points={[a.x, a.y, b.x, b.y]} stroke={MEASUREMENT_COLOR} strokeWidth={1.5/fit.scale} dash={[6/fit.scale,4/fit.scale]} />
+                  <Text x={(a.x+b.x)/2 + 4/fit.scale} y={(a.y+b.y)/2 + 4/fit.scale} text={`${measurement.distance.toFixed(2)} m`} fontSize={9/fit.scale} fill={MEASUREMENT_COLOR}/>
+                </Group>;
+              })}
               {p.zones.map(zone => {
                 const pts = zone.polygon.flatMap(q => { const v = worldToPixel(q.x, q.y, p.metadata); return [v.x, v.y]; });
                 if (pts.length < 6) return null;
@@ -117,7 +159,23 @@ export function PreviewDialog({ onClose }: { onClose: () => void }) {
             <div><span>Objects</span><b>{p.objects.length}</b></div>
             <div><span>Paths</span><b>{p.paths.length}</b></div>
             <div><span>Zones</span><b>{p.zones.length}</b></div>
+            <div><span>Walls</span><b>{p.building.walls.length}</b></div>
+            <div><span>Doors</span><b>{p.building.doors.length}</b></div>
+            <div><span>Floors</span><b>{p.building.floors.length}</b></div>
+            <div><span>Models</span><b>{p.building.models.length}</b></div>
+            <div><span>Measurements</span><b>{p.building.measurements.length}</b></div>
             <div><span>Resolution</span><b>{p.metadata.resolution} m/px</b></div>
+          </section>
+          <section><h3>Building Geometry</h3>
+            {p.building.walls.length + p.building.doors.length + p.building.floors.length + p.building.models.length + p.building.measurements.length === 0
+              ? <small>No building geometry</small>
+              : <>
+                {p.building.walls.map(w => <article className="previewitem" key={w.id}><b>{w.name}</b><span>Wall</span><code>({w.start.x.toFixed(3)}, {w.start.y.toFixed(3)}) → ({w.end.x.toFixed(3)}, {w.end.y.toFixed(3)})</code></article>)}
+                {p.building.doors.map(d => <article className="previewitem" key={d.id}><b>{d.name}</b><span>Door · {d.type.replaceAll('_',' ')}</span><code>({d.start.x.toFixed(3)}, {d.start.y.toFixed(3)}) → ({d.end.x.toFixed(3)}, {d.end.y.toFixed(3)})</code></article>)}
+                {p.building.floors.map(f => <article className="previewitem" key={f.id}><b>{f.name}</b><span>Floor · {f.polygon.length} vertices</span><code>{f.indoor ? 'Indoor' : 'Outdoor'} · {f.textureName}</code></article>)}
+                {p.building.models.map(m => <article className="previewitem" key={m.id}><b>{m.name}</b><span>Model · {m.modelName}</span><code>X {m.x.toFixed(3)} · Y {m.y.toFixed(3)} · Z {m.z.toFixed(3)}</code></article>)}
+                {p.building.measurements.map(m => <article className="previewitem" key={m.id}><b>{m.name}</b><span>Measurement</span><code>{m.distance.toFixed(3)} m</code></article>)}
+              </>}
           </section>
           <section><h3>Navigation Objects</h3>{p.objects.length === 0 ? <small>No objects</small> : p.objects.map(o => <article className="previewitem" key={o.id}><b>{o.name}</b><span>{o.type.replaceAll('_',' ')}</span><code>X {o.x.toFixed(3)} · Y {o.y.toFixed(3)} · {headingLabel(o.yaw)} · {radiansToDegrees(o.yaw).toFixed(1)}° · {o.yaw.toFixed(4)} rad</code></article>)}</section>
           <section><h3>Paths</h3>{p.paths.length === 0 ? <small>No paths</small> : p.paths.map(path => <article className="previewitem" key={path.id}><b>{path.name}</b><span>{path.type.replaceAll('_',' ')} · {path.type === 'one_way' ? 'ONE-WAY A → B' : path.type === 'bidirectional' ? 'TWO-WAY A ↔ B' : 'direction not explicit'} · {path.points.length} points</span><code>{path.maxSpeed != null ? `Max ${path.maxSpeed} m/s` : 'No speed limit set'}</code></article>)}</section>
