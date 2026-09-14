@@ -4,7 +4,7 @@ AMR Map Editor คือเว็บแอปสำหรับสร้าง �
 
 เวอร์ชันปัจจุบันใช้ **Light Theme** สำหรับงานวิศวกรรม และรองรับ workflow หลักตั้งแต่ Import ROS map ไปจนถึงสร้าง Navigation Objects, Paths, Zones, แก้ Occupancy Map, Preview, Validate, Save/Open และ Export Navigation JSON / ROS Map / RMF `.building.yaml`
 
-> Project version: **0.9.0**
+> Project version: **0.10.2**
 
 ---
 
@@ -103,6 +103,12 @@ AMR Map Editor คือเว็บแอปสำหรับสร้าง �
 - Navigation JSON รวม Objects + Paths + Zones
 - ROS ZIP Export (`map.yaml` + `map.pgm`)
 - RMF Traffic Editor `.building.yaml` Export
+- Building Geometry editor: Wall / Door / Floor Area / Model / Measurement
+- Wall Length / Angle editing
+- Wall resize anchor: Start / Center / End
+- Draggable Wall START / END endpoint handles
+- Path Junction / Connect / Merge
+- Delete individual Path Vertex
 
 ---
 
@@ -222,6 +228,7 @@ Tabs:
 - Objects
 - Paths
 - Zones
+- **Building**
 - Layers
 
 ### Right Inspector
@@ -890,6 +897,7 @@ Export
 - Occupancy PNG
 - PGM
 - YAML
+- **RMF Building (.building.yaml)**
 - Waypoints JSON
 - Paths JSON
 - Zones JSON
@@ -1180,6 +1188,8 @@ src/
     polygon.ts
     collision.ts
     distance.ts
+    pathTopology.ts
+    wall.ts
 
   validation/
     validator.ts
@@ -1199,6 +1209,7 @@ src/
       projectExporter.ts
       rosExporter.ts
       navigationExporters.ts
+      buildingExporter.ts
 
     persistence/
       indexedDb.ts
@@ -1223,11 +1234,12 @@ Architecture แยก UI / map engine / geometry / validation / persistence / i
 
 สิ่งที่ยังสามารถพัฒนาต่อ:
 
+- Multi-level / Lift editor
+- Advanced RMF lift/door pairing
+
 - Free-space / Unknown occupancy brush modes
 - Fill tool
 - Advanced multi-selection / box selection
-- Insert/Delete individual path vertex ผ่าน dedicated commands
-- Insert/Delete individual zone vertex ผ่าน dedicated commands
 - Whole-zone drag refinement
 - Revision history / compare revisions
 - Recent Projects management UI
@@ -1236,6 +1248,180 @@ Architecture แยก UI / map engine / geometry / validation / persistence / i
 - Fleet Manager integration
 - Authentication / authorization
 - Browser-level integration/E2E tests เพิ่มเติม
+
+---
+
+
+# RMF Building Geometry (v0.10.0+)
+
+แท็บ **Building** ใช้สร้าง geometry สำหรับ Export ไปเป็น Open-RMF / Traffic Editor `.building.yaml`
+
+รองรับ:
+
+- Wall
+- Door
+- Floor Area
+- Model
+- Measurement
+
+## Wall
+
+เลือก `Building → Wall` แล้วคลิก 2 จุดบนแผนที่
+
+สามารถแก้:
+
+- Start X / Y
+- End X / Y
+- **Length (m)**
+- **Angle (°)**
+- Resize Anchor: Start / Center / End
+- Texture Name
+- Texture Height
+- Texture Width
+- Texture Scale
+- Alpha
+- Enabled
+
+### Wall Length / Angle
+
+ถ้าวาด Wall แล้วสั้นหรือยาวเกินไป ไม่ต้องลบและวาดใหม่ สามารถแก้ `Length (m)` และ `Angle (°)` ได้โดยตรงจาก Properties
+
+Anchor มี 3 แบบ:
+
+- **Start** — Start Point อยู่ที่เดิม แล้ว End Point ขยับ
+- **Center** — จุดกึ่งกลางอยู่ที่เดิม และ Wall ขยาย/หดออกสองด้าน
+- **End** — End Point อยู่ที่เดิม แล้ว Start Point ขยับ
+
+### Wall Endpoint Dragging (v0.10.2)
+
+เลือก **Select Tool (`V`)** แล้วคลิก Wall จะเห็น Handle 2 จุด:
+
+```text
+START ○────────────────○ END
+```
+
+สามารถลาก START หรือ END ด้วยเมาส์ได้โดยตรง
+
+- ลาก START → END อยู่ที่เดิม
+- ลาก END → START อยู่ที่เดิม
+- Length / Angle / Start-End Coordinates อัปเดตแบบ live
+- Undo ได้ด้วย `Ctrl/Cmd + Z`
+- ถ้า Building Layer ถูก Lock จะไม่สามารถลาก Handle ได้
+
+แนะนำให้ใช้ Mouse Drag สำหรับปรับเร็ว และใช้ Length / Angle / Coordinates สำหรับค่าที่ต้องการความแม่นยำ
+
+## Door
+
+เลือก `Building → Door` แล้วคลิก 2 จุด
+
+Properties:
+
+- Name
+- Door Type: hinged / double_hinged / sliding / double_sliding
+- Motion Axis
+- Motion Degrees
+- Motion Direction
+- Plugin
+- Right/Left Ratio
+
+## Floor Area
+
+เลือก `Building → Floor Area` คลิกอย่างน้อย 3 vertices แล้วกด Enter หรือ Double Click เพื่อปิด polygon
+
+Properties:
+
+- Texture Name
+- Texture Scale
+- Texture Rotation
+- Ceiling Texture
+- Ceiling Scale
+- Indoor
+
+## Model
+
+เลือก `Building → Model` แล้วคลิก 1 จุด
+
+Properties:
+
+- Model Name
+- Name
+- X / Y
+- Yaw
+- Z
+- Static
+- Dispensable
+
+## Measurement
+
+เลือก `Building → Measurement` แล้วคลิก 2 จุด ระบบคำนวณระยะจริงเป็นเมตรอัตโนมัติ
+
+## Building / Level Properties
+
+รองรับ:
+
+- Building Name
+- Level Name
+- Reference Level
+- Elevation (m)
+
+ปัจจุบัน workflow หลักยังเป็น **single-level** และ `lifts` ยัง export เป็น `{}`
+
+---
+
+# RMF `.building.yaml` Export
+
+เปิด:
+
+```text
+Export → RMF Building (.building.yaml)
+```
+
+ตัวอย่างไฟล์:
+
+```text
+FactoryA_Floor1.building.yaml
+```
+
+Mapping หลัก:
+
+- Navigation Objects → `vertices`
+- Paths → `lanes`
+- One-way Path → `bidirectional: false`
+- Bidirectional Path → `bidirectional: true`
+- Charging Station → `is_charger`
+- Waiting Point → `is_holding_point`
+- Parking Point → `is_parking_spot`
+- Docking Station → `dock_name`
+- Pickup Point → `pickup_dispenser`
+- Drop-off Point → `dropoff_ingestor`
+- Wall → `walls`
+- Door → `doors`
+- Floor Area → `floors`
+- Model → `models`
+- Measurement → `measurements`
+
+โครงสร้างตัวอย่าง:
+
+```yaml
+name: Factory
+reference_level_name: L1
+coordinate_system: cartesian_meters
+levels:
+  L1:
+    elevation: 0
+    drawing:
+      filename: Factory.png
+    doors: []
+    floors: []
+    lanes: []
+    measurements: []
+    models: []
+    vertices: []
+    walls: []
+lifts: {}
+```
+
+ถ้าต้องการ background ใน Traffic Editor ให้ Export Occupancy PNG ด้วย base name เดียวกัน และวาง `.building.yaml` กับ `.png` ไว้ในโฟลเดอร์เดียวกัน
 
 ---
 
@@ -1584,3 +1770,25 @@ START ○────────────────○ END
 
 - **Mouse Drag** สำหรับปรับตำแหน่งอย่างรวดเร็ว
 - **Length / Angle / Coordinates** ใน Properties สำหรับปรับค่าที่ต้องการความแม่นยำ
+
+
+---
+
+# Latest Version — v0.10.2
+
+ฟังก์ชันล่าสุดที่รวมอยู่ในเอกสารนี้:
+
+- Light Theme
+- Navigation Objects + Heading/Yaw
+- Path Types + One-way/Two-way UI
+- Delete individual Path Vertex
+- Path Snap / Connect / Junction / Merge
+- Custom Export File Name
+- Custom Brush Color
+- Navigation JSON
+- ROS Map Export
+- RMF `.building.yaml` Export
+- Building Geometry: Wall / Door / Floor / Model / Measurement
+- Wall Length / Angle editing
+- Wall Resize Anchor
+- Draggable Wall START / END handles
