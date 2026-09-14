@@ -267,7 +267,86 @@ export function MapCanvas() {
 
       {e.layers.building.visible&&<Layer>
         {p.building.floors.map(f=>{const pts=f.polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={f.id}><Line points={pts} closed fill="rgba(148,163,184,.14)" stroke={e.selection.includes(f.id)?'#0284c7':'#94a3b8'} strokeWidth={(e.selection.includes(f.id)?3:1.5)/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([f.id])}}/>{e.layers.labels.visible&&pts.length>=2&&<Text x={pts[0]+4} y={pts[1]+4} text={f.name} fontSize={9/e.viewport.scale} fill="#475569"/>}</Group>})}
-        {p.building.walls.map(w=>{const a=worldToPixel(w.start.x,w.start.y,p.metadata),b=worldToPixel(w.end.x,w.end.y,p.metadata);return <Line key={w.id} points={[a.x,a.y,b.x,b.y]} stroke={e.selection.includes(w.id)?'#0284c7':'#334155'} strokeWidth={(e.selection.includes(w.id)?5:3)/e.viewport.scale} hitStrokeWidth={12/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([w.id])}}/>})}
+        {p.building.walls.map(w=>{
+          const a=worldToPixel(w.start.x,w.start.y,p.metadata);
+          const b=worldToPixel(w.end.x,w.end.y,p.metadata);
+          const selected=e.selection.includes(w.id);
+          const editable=selected&&e.tool==='select'&&!e.layers.building.locked;
+
+          const updateEndpoint=(endpoint:'start'|'end',x:number,y:number)=>{
+            const world=pixelToWorld(x,y,p.metadata);
+            p.updateWall(w.id,endpoint==='start'?{start:world}:{end:world});
+          };
+
+          const setHandleCursor=(ev:any,cursor:string)=>{
+            const stage=ev.target.getStage?.();
+            if(stage) stage.container().style.cursor=cursor;
+          };
+
+          return <Group key={w.id}>
+            <Line
+              points={[a.x,a.y,b.x,b.y]}
+              stroke={selected?'#0284c7':'#334155'}
+              strokeWidth={(selected?5:3)/e.viewport.scale}
+              hitStrokeWidth={12/e.viewport.scale}
+              onClick={ev=>{ev.cancelBubble=true;e.setSelection([w.id])}}
+              onTap={ev=>{ev.cancelBubble=true;e.setSelection([w.id])}}
+            />
+
+            {editable&&<>
+              <Circle
+                x={a.x}
+                y={a.y}
+                radius={7/e.viewport.scale}
+                fill="#ffffff"
+                stroke="#0284c7"
+                strokeWidth={2/e.viewport.scale}
+                draggable
+                onMouseEnter={ev=>setHandleCursor(ev,'grab')}
+                onMouseLeave={ev=>setHandleCursor(ev,'default')}
+                onDragStart={ev=>{setHandleCursor(ev,'grabbing');p.commit()}}
+                onDragMove={ev=>updateEndpoint('start',ev.target.x(),ev.target.y())}
+                onDragEnd={ev=>{updateEndpoint('start',ev.target.x(),ev.target.y());setHandleCursor(ev,'grab')}}
+                onClick={ev=>{ev.cancelBubble=true}}
+                onTap={ev=>{ev.cancelBubble=true}}
+              />
+              <Circle
+                x={b.x}
+                y={b.y}
+                radius={7/e.viewport.scale}
+                fill="#ffffff"
+                stroke="#0284c7"
+                strokeWidth={2/e.viewport.scale}
+                draggable
+                onMouseEnter={ev=>setHandleCursor(ev,'grab')}
+                onMouseLeave={ev=>setHandleCursor(ev,'default')}
+                onDragStart={ev=>{setHandleCursor(ev,'grabbing');p.commit()}}
+                onDragMove={ev=>updateEndpoint('end',ev.target.x(),ev.target.y())}
+                onDragEnd={ev=>{updateEndpoint('end',ev.target.x(),ev.target.y());setHandleCursor(ev,'grab')}}
+                onClick={ev=>{ev.cancelBubble=true}}
+                onTap={ev=>{ev.cancelBubble=true}}
+              />
+              {e.layers.labels.visible&&<>
+                <Text
+                  x={a.x+9/e.viewport.scale}
+                  y={a.y-17/e.viewport.scale}
+                  text="START"
+                  fontSize={8/e.viewport.scale}
+                  fill="#0369a1"
+                  listening={false}
+                />
+                <Text
+                  x={b.x+9/e.viewport.scale}
+                  y={b.y-17/e.viewport.scale}
+                  text="END"
+                  fontSize={8/e.viewport.scale}
+                  fill="#0369a1"
+                  listening={false}
+                />
+              </>}
+            </>}
+          </Group>
+        })}
         {p.building.doors.map(d=>{const a=worldToPixel(d.start.x,d.start.y,p.metadata),b=worldToPixel(d.end.x,d.end.y,p.metadata);return <Group key={d.id}><Line points={[a.x,a.y,b.x,b.y]} stroke={e.selection.includes(d.id)?'#0284c7':'#f59e0b'} strokeWidth={4/e.viewport.scale} dash={[7/e.viewport.scale,3/e.viewport.scale]} hitStrokeWidth={12/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([d.id])}}/>{e.layers.labels.visible&&<Text x={(a.x+b.x)/2} y={(a.y+b.y)/2-12/e.viewport.scale} text={d.name} fontSize={9/e.viewport.scale} fill="#92400e"/>}</Group>})}
         {p.building.models.map(m=>{const v=worldToPixel(m.x,m.y,p.metadata);return <Group key={m.id} x={v.x} y={v.y} onClick={ev=>{ev.cancelBubble=true;e.setSelection([m.id])}}><Rect x={-6/e.viewport.scale} y={-6/e.viewport.scale} width={12/e.viewport.scale} height={12/e.viewport.scale} fill="#7c3aed" stroke={e.selection.includes(m.id)?'#0284c7':'#5b21b6'} strokeWidth={2/e.viewport.scale}/>{e.layers.labels.visible&&<Text x={8/e.viewport.scale} y={-7/e.viewport.scale} text={m.name} fontSize={9/e.viewport.scale} fill="#5b21b6"/>}</Group>})}
         {p.building.measurements.map(m=>{const a=worldToPixel(m.start.x,m.start.y,p.metadata),b=worldToPixel(m.end.x,m.end.y,p.metadata);return <Group key={m.id}><Line points={[a.x,a.y,b.x,b.y]} stroke={e.selection.includes(m.id)?'#0284c7':'#16a34a'} dash={[5/e.viewport.scale,3/e.viewport.scale]} strokeWidth={2/e.viewport.scale} hitStrokeWidth={10/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([m.id])}}/><Text x={(a.x+b.x)/2} y={(a.y+b.y)/2} text={`${m.distance.toFixed(2)} m`} fontSize={9/e.viewport.scale} fill="#166534"/></Group>})}

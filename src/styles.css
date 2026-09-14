@@ -142,3 +142,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 
 /* RMF Building editor */
 .sidebar-help{margin:12px 8px;padding:9px;border:1px solid #cbd5e1;background:#f8fafc;color:#64748b;font-size:11px;line-height:1.45}
+
+/* Wall exact geometry editor */
+.wall-geometry-card{margin:6px 9px 9px;padding:8px;border:1px solid #d5dee6;background:#f8fafb;border-radius:2px}
+.wall-geometry-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px}.wall-geometry-head .group-title{padding:0}.wall-geometry-head small{display:block;margin-top:2px;color:#718391;font-size:9px}.wall-geometry-head>b{font:700 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:#075985;background:#e8f4fb;border:1px solid #a9d6ec;padding:3px 6px;border-radius:2px;white-space:nowrap}
+.wall-anchor-label{margin:6px 0 4px;color:#667986;font-size:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase}.wall-anchor-toggle{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}.wall-anchor-toggle button{border:1px solid #cbd6de;background:#fff;color:#506170;min-height:29px;border-radius:2px;cursor:pointer;font-size:10px}.wall-anchor-toggle button:hover{background:#eef5fa;border-color:#a9cce1}.wall-anchor-toggle button.active{background:#e8f4fb;border-color:#5aa9d4;box-shadow:inset 0 0 0 1px #5aa9d4;color:#075985;font-weight:700}.wall-geometry-help{margin-top:6px;color:#697b89;font-size:9px;line-height:1.45}

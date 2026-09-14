@@ -1454,6 +1454,9 @@ drawing:
 เลือก `Building → Wall` แล้วคลิก 2 จุดบนแผนที่ จากนั้นเลือก Wall เพื่อแก้ Properties:
 
 - Start / End X,Y
+- **Length (m)** — ปรับความยาว Wall แบบตัวเลขหลังจากวาดได้
+- **Angle (°)** — ปรับมุม Wall โดยไม่ต้องวาดใหม่
+- **Resize Anchor: Start / Center / End** — เลือกจุดอ้างอิงตอนยืด/หดหรือหมุน Wall
 - Texture Name
 - Texture Height
 - Texture Width
@@ -1533,3 +1536,51 @@ lifts: {}
 Navigation Objects จะถูกแปลงเป็น named vertices และ Paths เป็น lanes เช่นเดิม ส่วน Building tab จะเติม walls / doors / floors / models / measurements.
 
 > ปัจจุบัน editor เป็น single-level workflow และ `lifts` ยัง export เป็น `{}`. การทำ multi-level + lift editor ควรเป็น phase ถัดไป เพราะ lift ต้องผูกหลาย level และ door pairs เข้าด้วยกัน.
+
+
+## Wall Length / Angle Editing
+
+หลังวาด Wall 2 จุดแล้ว ให้เลือก Wall และเปิด **WALL PROPERTIES → WALL GEOMETRY** สามารถแก้ `Length (m)` และ `Angle (°)` ได้โดยตรง ถ้าวาดสั้นเกินไปไม่ต้องลบและวาดใหม่
+
+เลือก Anchor ได้ 3 แบบ:
+
+- **Start** — Start Point อยู่ที่เดิม แล้ว End Point ขยับ
+- **End** — End Point อยู่ที่เดิม แล้ว Start Point ขยับ
+- **Center** — จุดกึ่งกลางอยู่ที่เดิม และ Wall ขยาย/หดออกสองด้านเท่า ๆ กัน
+
+ค่าจะ sync สองทาง: การแก้ Start/End X,Y จะทำให้ Length/Angle คำนวณใหม่ และการแก้ Length/Angle จะอัปเดต Start/End geometry บน Map ทันที พร้อมรองรับ Undo/Redo ผ่าน history ของ Project Store.
+
+
+## Wall Endpoint Dragging (v0.10.2)
+
+Wall สามารถแก้ geometry ได้ทั้งจาก Properties และจาก Mouse บน Map Canvas
+
+### ลากปลาย Wall ด้วย Mouse
+
+1. เลือก **Select Tool (`V`)**
+2. คลิก Wall ที่ต้องการแก้
+3. ที่ปลาย Wall จะปรากฏ Handle 2 จุด:
+   - `START`
+   - `END`
+4. ลาก Handle ที่ต้องการไปยังตำแหน่งใหม่
+5. ค่า Start X/Y, End X/Y, Length และ Angle ใน Properties จะอัปเดตตาม geometry ใหม่
+
+```text
+START ○────────────────○ END
+      ↑                ↑
+      ลากได้           ลากได้
+```
+
+- ลาก `START` → `END` อยู่ที่เดิม
+- ลาก `END` → `START` อยู่ที่เดิม
+- ระหว่างลาก Wall จะเปลี่ยนแบบ live
+- การลากหนึ่งครั้งถูกบันทึกเป็น Undo step เดียว
+- ใช้ `Ctrl/Cmd + Z` เพื่อ Undo ได้
+- หาก Building Layer ถูก Lock จะไม่สามารถลาก Handle ได้
+
+### Precision + Mouse Workflow
+
+แนะนำให้ใช้สองวิธีร่วมกัน:
+
+- **Mouse Drag** สำหรับปรับตำแหน่งอย่างรวดเร็ว
+- **Length / Angle / Coordinates** ใน Properties สำหรับปรับค่าที่ต้องการความแม่นยำ

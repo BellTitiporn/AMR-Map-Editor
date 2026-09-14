@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { ArrowLeftRight, ArrowRight, CircleCheck, GitMerge, Link2, Copy, RotateCcw, Trash2 } from 'lucide-react';
 import { useEditorStore } from '../../state/editorStore';
 import { useProjectStore } from '../../state/projectStore';
-import type { BuildingDoorType, NavigationObject, NavigationPath, PathType, ZoneType } from '../../models';
+import type { BuildingDoorType, BuildingWall, NavigationObject, NavigationPath, PathType, ZoneType } from '../../models';
 import { degreesToRadians, headingLabel, normalizeAngle, normalizeDegrees, radiansToDegrees } from '../../geometry/angles';
 import { connectPathEndpoint, DEFAULT_PATH_SNAP_DISTANCE_M, endpointConnectionStatus, findNearestMergeCandidate, mergeWithNearestPath } from '../../geometry/pathTopology';
+import { resizeWall, wallAngleDegrees, wallLength, type WallResizeAnchor } from '../../geometry/wall';
 
 export function Inspector() {
   const selection = useEditorStore(s => s.selection);
@@ -95,6 +96,7 @@ export function Inspector() {
       <Field l="Name" v={wall.name} begin={begin} on={v=>p.updateWall(wall.id,{name:v})}/>
       <div className="twocol"><NumberField l="Start X" v={rounded(wall.start.x)} begin={begin} on={v=>p.updateWall(wall.id,{start:{...wall.start,x:v}})}/><NumberField l="Start Y" v={rounded(wall.start.y)} begin={begin} on={v=>p.updateWall(wall.id,{start:{...wall.start,y:v}})}/></div>
       <div className="twocol"><NumberField l="End X" v={rounded(wall.end.x)} begin={begin} on={v=>p.updateWall(wall.id,{end:{...wall.end,x:v}})}/><NumberField l="End Y" v={rounded(wall.end.y)} begin={begin} on={v=>p.updateWall(wall.id,{end:{...wall.end,y:v}})}/></div>
+      <WallGeometryEditor wall={wall} />
       <Field l="Texture" v={wall.textureName} begin={begin} on={v=>p.updateWall(wall.id,{textureName:v})}/>
       <div className="twocol"><NumberField l="Height (m)" v={wall.textureHeight} begin={begin} on={v=>v>0&&p.updateWall(wall.id,{textureHeight:v})}/><NumberField l="Width" v={wall.textureWidth} begin={begin} on={v=>v>0&&p.updateWall(wall.id,{textureWidth:v})}/></div>
       <div className="twocol"><NumberField l="Texture Scale" v={wall.textureScale} begin={begin} on={v=>v>0&&p.updateWall(wall.id,{textureScale:v})}/><NumberField l="Alpha" v={wall.alpha} step={.1} begin={begin} on={v=>v>=0&&v<=1&&p.updateWall(wall.id,{alpha:v})}/></div>
@@ -146,6 +148,43 @@ export function Inspector() {
   }
 }
 
+
+
+function WallGeometryEditor({ wall }: { wall: BuildingWall }) {
+  const p = useProjectStore();
+  const [anchor, setAnchor] = useState<WallResizeAnchor>('start');
+  const length = wallLength(wall.start, wall.end);
+  const angle = wallAngleDegrees(wall.start, wall.end);
+
+  const apply = (nextLength: number, nextAngle: number) => {
+    if (!Number.isFinite(nextLength) || nextLength <= 0 || !Number.isFinite(nextAngle)) return;
+    const next = resizeWall(wall.start, wall.end, nextLength, nextAngle, anchor);
+    p.updateWall(wall.id, next);
+  };
+
+  return <div className="wall-geometry-card">
+    <div className="wall-geometry-head">
+      <div>
+        <span className="group-title">WALL GEOMETRY</span>
+        <small>Edit exact wall length and angle after drawing.</small>
+      </div>
+      <b>{length.toFixed(3)} m</b>
+    </div>
+    <div className="twocol">
+      <NumberField l="Length (m)" v={Number(length.toFixed(3))} step={0.05} begin={() => p.commit()} on={v => apply(v, angle)} />
+      <NumberField l="Angle (°)" v={Number(angle.toFixed(2))} step={1} begin={() => p.commit()} on={v => apply(length, v)} />
+    </div>
+    <div className="wall-anchor-label">Extend / rotate around</div>
+    <div className="wall-anchor-toggle" role="group" aria-label="Wall resize anchor">
+      <button type="button" className={anchor === 'start' ? 'active' : ''} onClick={() => setAnchor('start')}>Start</button>
+      <button type="button" className={anchor === 'center' ? 'active' : ''} onClick={() => setAnchor('center')}>Center</button>
+      <button type="button" className={anchor === 'end' ? 'active' : ''} onClick={() => setAnchor('end')}>End</button>
+    </div>
+    <div className="wall-geometry-help">
+      Start keeps the start point fixed, End keeps the end point fixed, and Center grows/shrinks equally in both directions.
+    </div>
+  </div>;
+}
 
 function PathPointEditor({ path, selected, onSelect }: { path: { id: string; points: { x: number; y: number }[] }; selected: number | null; onSelect: (index: number | null) => void }) {
   const p = useProjectStore();
