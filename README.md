@@ -4,7 +4,7 @@ AMR Map Editor คือเว็บแอปสำหรับสร้าง �
 
 เวอร์ชันปัจจุบันใช้ **Light Theme** สำหรับงานวิศวกรรม และรองรับ workflow หลักตั้งแต่ Import ROS map ไปจนถึงสร้าง Navigation Objects, Paths, Zones, แก้ Occupancy Map, Preview, Validate, Save/Open และ Export Navigation JSON / ROS Map / RMF `.building.yaml`
 
-> Project version: **0.10.2**
+> Project version: **0.10.6**
 
 ---
 
@@ -1234,6 +1234,10 @@ Architecture แยก UI / map engine / geometry / validation / persistence / i
 
 สิ่งที่ยังสามารถพัฒนาต่อ:
 
+- Dedicated Wall junction/topology validation
+
+- Grid snapping / configurable snap tolerance
+
 - Multi-level / Lift editor
 - Advanced RMF lift/door pairing
 
@@ -1836,22 +1840,161 @@ Validate / Preview
 Save / Export
 ```
 
+---
 
-# Latest Version — v0.10.2
+
+
+# Canvas Interaction / Snapping (v0.10.6)
+
+## Path Drawing over Floor / Building Geometry
+
+Floor Area และ Building Geometry จะไม่ดัก pointer event ขณะใช้เครื่องมือวาด เช่น:
+
+- Path
+- Zone
+- Wall / Door / Floor
+- Measure
+- Brush
+
+ดังนั้นสามารถสร้าง Path ทับบน Floor Area ได้ตามปกติ โดยไม่ต้องซ่อน Floor ก่อน
+
+เมื่อใช้ **Select Tool (`V`)** entity ต่าง ๆ จะกลับมารับ pointer event เพื่อให้เลือกและแก้ไขได้
+
+## Path Snap Highlight
+
+ขณะใช้ Path Tool เมื่อ cursor เข้าใกล้:
+
+- Navigation Object
+- Path vertex
+- Path segment
+
+ระบบจะแสดง snap target highlight เพื่อบอกว่าจุดนั้นสามารถเชื่อมได้ ก่อนคลิกจริง
+
+ตัวอย่าง:
+
+```text
+          SNAP
+           ○
+PATH-A ────●────────
+           │
+           │ PATH-B
+```
+
+เมื่อคลิกแล้ว จุดใหม่จะใช้พิกัด snap จริง เพื่อให้ topology เชื่อมกัน ไม่ใช่เพียงมองเห็นว่าเส้นแตะกัน
+
+## Wall Color
+
+Wall ใช้สีที่แตกต่างจาก Path เพื่อให้แยก geometry ได้ง่ายขึ้น:
+
+- Wall ปกติ → สีม่วง
+- Wall ที่เลือก → สี amber / orange
+- START / END handle → สี amber
+
+Path ยังคงใช้สีน้ำเงินตาม navigation style
+
+## Wall Endpoint Snap
+
+เมื่อเลือก:
+
+```text
+Building → Wall
+```
+
+และนำ cursor เข้าใกล้ START / END ของ Wall เดิม จะมี snap highlight แสดงขึ้น
+
+ตัวอย่าง:
+
+```text
+Wall A
+START ○────────────────○ END
+                         ↑
+                       SNAP
+                         ○
+                       Wall B
+```
+
+คลิกที่ target แล้ว Wall ใหม่จะใช้ endpoint เดียวกับ Wall เดิมจริง
+
+รองรับทั้ง:
+
+1. สร้าง Wall ใหม่ต่อจาก endpoint เดิม
+2. ลาก START / END handle ของ Wall ที่เลือกไป snap เข้ากับ endpoint ของ Wall อื่น
+
+### Recommended Wall workflow
+
+```text
+วาด Wall
+   ↓
+เลือก Wall
+   ↓
+ปรับ Length / Angle ถ้าต้องการ
+   ↓
+ลาก START / END เพื่อแก้ตำแหน่ง
+   ↓
+snap endpoint เข้ากับ Wall ที่อยู่ติดกัน
+```
+
+ใช้ Mouse Drag สำหรับการปรับแบบเร็ว และใช้ Length / Angle / Coordinates สำหรับค่าที่ต้องการความแม่นยำ
+
+---
+
+
+# Changelog Summary
+
+## v0.10.6
+- แยกสี Wall ออกจาก Path
+- เพิ่ม Wall endpoint snap highlight
+- เพิ่ม Wall endpoint snapping ตอนสร้างและลากแก้
+- คง Path snap highlight
+- คง fix ที่ทำให้ Floor / Building geometry ไม่ขวางการวาด Path
+
+## v0.10.2
+- เพิ่ม draggable Wall START / END handles
+- เพิ่ม Wall Length / Angle editing
+- เพิ่ม Resize Anchor: Start / Center / End
+
+## v0.10.0
+- เพิ่ม Building tab
+- เพิ่ม Wall / Door / Floor Area / Model / Measurement
+- เพิ่ม RMF `.building.yaml` export
+
+## v0.9.0
+- เพิ่ม Custom Brush Color
+- เพิ่ม RMF `.building.yaml` navigation skeleton
+
+## v0.8.x
+- เพิ่ม Path Connectivity / Junction / Connect / Merge
+- เพิ่ม Custom Export File Name
+
+---
+
+# Latest Version — v0.10.6
 
 ฟังก์ชันล่าสุดที่รวมอยู่ในเอกสารนี้:
 
-- Light Theme
-- Navigation Objects + Heading/Yaw
-- Path Types + One-way/Two-way UI
+- Light Theme สำหรับ CAD / GIS / Robotics workflow
+- Navigation Objects + Heading / Yaw
+- Path Types + One-way / Two-way
 - Delete individual Path Vertex
-- Path Snap / Connect / Junction / Merge
+- Path Snap / Junction / Connect / Merge
+- Path snap target highlight ขณะสร้าง Path
 - Custom Export File Name
 - Custom Brush Color
 - Navigation JSON
 - ROS Map Export
 - RMF `.building.yaml` Export
-- Building Geometry: Wall / Door / Floor / Model / Measurement
+- Building Geometry
+  - Floor Area
+  - Wall
+  - Door
+  - Model
+  - Measurement
 - Wall Length / Angle editing
-- Wall Resize Anchor
+- Wall Resize Anchor: Start / Center / End
 - Draggable Wall START / END handles
+- Wall ใช้สีแยกจาก Path เพื่อมองเห็นต่างกันชัดเจน
+- Wall endpoint snap / highlight สำหรับต่อ Wall ใหม่เข้ากับ Wall เดิม
+- ลาก Wall endpoint ไป snap เข้าปลาย Wall อื่นได้
+- Floor / Building geometry ไม่ขวางการวาด Path
+- Existing Path / Zone / Object ไม่ขวาง active drawing tool
+- Undo / Redo
