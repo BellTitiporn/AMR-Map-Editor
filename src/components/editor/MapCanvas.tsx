@@ -8,7 +8,6 @@ import { distance, polylineLength } from '../../geometry/distance';
 import { polygonArea } from '../../geometry/polygon';
 import { headingLabel, normalizeAngle, radiansToDegrees } from '../../geometry/angles';
 import { collectPathJunctions, connectPathEndpoint, DEFAULT_PATH_SNAP_DISTANCE_M } from '../../geometry/pathTopology';
-import { dedupeEndpointCandidates, snapPointToEndpointCandidates, DEFAULT_DRAW_ENDPOINT_SNAP_DISTANCE_M, type EndpointSnapCandidate } from '../../geometry/endpointSnapping';
 import { paintOccupancy, paintOccupancyShape } from '../../services/mapEditing/occupancyEditor';
 import type { MapMetadata, NavigationPath } from '../../models';
 
@@ -182,38 +181,10 @@ export function MapCanvas() {
     e.setSelection([id]); setBuildingDrawing(null); e.setBuildingTool(null);
   };
 
-  const pathEndpointSnapCandidates = (): EndpointSnapCandidate[] => dedupeEndpointCandidates([
-    ...p.paths.filter(path => path.enabled && path.points.length > 0).flatMap(path => [
-      { point: path.points[0], sourceId: path.id, sourceKind: 'path' as const, endpoint: 'start' as const, label: `${path.name} START` },
-      { point: path.points[path.points.length - 1], sourceId: path.id, sourceKind: 'path' as const, endpoint: 'end' as const, label: `${path.name} END` },
-    ]),
-    ...p.objects.filter(object => object.enabled).map(object => ({
-      point: { x: object.x, y: object.y }, sourceId: object.id, sourceKind: 'object' as const, endpoint: 'point' as const, label: object.name,
-    })),
-  ]);
-
-  const wallEndpointSnapCandidates = (): EndpointSnapCandidate[] => dedupeEndpointCandidates(
-    p.building.walls.filter(wall => wall.enabled).flatMap(wall => [
-      { point: wall.start, sourceId: wall.id, sourceKind: 'wall' as const, endpoint: 'start' as const, label: `${wall.name} START` },
-      { point: wall.end, sourceId: wall.id, sourceKind: 'wall' as const, endpoint: 'end' as const, label: `${wall.name} END` },
-    ]),
-  );
-
-  const snapDrawingPoint = (point: Point): Point => {
-    if (e.tool === 'path') {
-      return snapPointToEndpointCandidates(point, pathEndpointSnapCandidates(), DEFAULT_DRAW_ENDPOINT_SNAP_DISTANCE_M).point;
-    }
-    if (e.tool === 'building' && e.buildingTool === 'wall') {
-      return snapPointToEndpointCandidates(point, wallEndpointSnapCandidates(), DEFAULT_DRAW_ENDPOINT_SNAP_DISTANCE_M).point;
-    }
-    return point;
-  };
-
   const addBuildingPoint = (w: Point) => {
     const kind=e.buildingTool; if (!kind) return;
-    const point = kind === 'wall' ? snapDrawingPoint(w) : w;
     if (kind==='model') { p.commit(); const id=`MODEL-${crypto.randomUUID().slice(0,6)}`; p.addModel({id,name:id,modelName:'OpenRobotics/OfficeChairBlack',x:w.x,y:w.y,yaw:0,z:0,static:true,dispensable:false,enabled:true}); e.setSelection([id]); e.setBuildingTool(null); return; }
-    const current=buildingDrawing?.kind===kind?buildingDrawing.points:[]; const points=[...current,point];
+    const current=buildingDrawing?.kind===kind?buildingDrawing.points:[]; const points=[...current,w];
     if ((kind==='wall'||kind==='door'||kind==='measurement') && points.length===2) {
       p.commit(); const id=`${kind.toUpperCase()}-${crypto.randomUUID().slice(0,6)}`;
       if(kind==='wall') p.addWall({id,name:id,start:points[0],end:points[1],enabled:true,alpha:1,textureName:'wall_white',textureScale:1,textureWidth:1,textureHeight:2.5});
@@ -237,8 +208,7 @@ export function MapCanvas() {
       const id=`${prefix}-${crypto.randomUUID().slice(0,6)}`;
       p.addObject({id,name:id,type:e.placementObject,x:w.x,y:w.y,yaw:0,enabled:true,metadata:{}});e.setSelection([id]);e.setPlacementObject(null);
     } else if (e.tool==='path'||e.tool==='zone') {
-      const point = e.tool === 'path' ? snapDrawingPoint(w) : w;
-      setDrawing(d=>d&&d.kind===e.tool?{...d,points:[...d.points,point]}:{kind:e.tool as 'path'|'zone',points:[point]});
+      setDrawing(d=>d&&d.kind===e.tool?{...d,points:[...d.points,w]}:{kind:e.tool as 'path'|'zone',points:[w]});
     } else if(e.tool==='measure') setMeasure(m=>[...m,w]);
     else if(evt.target===evt.target.getStage()) e.setSelection([]);
   };
@@ -262,20 +232,6 @@ export function MapCanvas() {
   const measurementPoints=hover&&e.tool==='measure'&&measure.length?[...measure,hover]:measure;
   const measurementTotal=e.measureMode==='area'&&measure.length>=3?polygonArea(measure):polylineLength(measure);
   const pathJunctions = collectPathJunctions(p.paths, p.objects);
-  const endpointSnapCandidates = e.tool === 'path'
-    ? pathEndpointSnapCandidates()
-    : e.tool === 'building' && e.buildingTool === 'wall'
-      ? wallEndpointSnapCandidates()
-      : [];
-  const hoveredEndpointSnap = hover && endpointSnapCandidates.length
-    ? snapPointToEndpointCandidates(hover, endpointSnapCandidates, DEFAULT_DRAW_ENDPOINT_SNAP_DISTANCE_M).candidate
-    : null;
-  const pathDraftPoints = drawing?.kind === 'path'
-    ? [...drawing.points, ...(hover ? [snapDrawingPoint(hover)] : [])]
-    : [];
-  const buildingDraftPoints = buildingDrawing
-    ? [...buildingDrawing.points, ...(hover && buildingDrawing.kind !== 'floor' ? [snapDrawingPoint(hover)] : [])]
-    : [];
 
   const brushPreviewPoints = brushPolygon.length
     ? [...brushPolygon, ...(hover && e.tool === 'brush' && e.brushShape === 'polygon' ? [hover] : [])]
@@ -309,7 +265,7 @@ export function MapCanvas() {
         <Origin scale={e.viewport.scale}/>
       </Layer>
 
-      {e.layers.building.visible&&<Layer>
+      {e.layers.building.visible&&<Layer listening={e.tool==='select'}>
         {p.building.floors.map(f=>{const pts=f.polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={f.id}><Line points={pts} closed fill="rgba(148,163,184,.14)" stroke={e.selection.includes(f.id)?'#0284c7':'#94a3b8'} strokeWidth={(e.selection.includes(f.id)?3:1.5)/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([f.id])}}/>{e.layers.labels.visible&&pts.length>=2&&<Text x={pts[0]+4} y={pts[1]+4} text={f.name} fontSize={9/e.viewport.scale} fill="#475569"/>}</Group>})}
         {p.building.walls.map(w=>{
           const a=worldToPixel(w.start.x,w.start.y,p.metadata);
@@ -330,12 +286,9 @@ export function MapCanvas() {
           return <Group key={w.id}>
             <Line
               points={[a.x,a.y,b.x,b.y]}
-              stroke={selected?'#f97316':'#d97706'}
+              stroke={selected?'#0284c7':'#334155'}
               strokeWidth={(selected?5:3)/e.viewport.scale}
               hitStrokeWidth={12/e.viewport.scale}
-              lineCap="round"
-              lineJoin="round"
-              listening={e.tool === 'select'}
               onClick={ev=>{ev.cancelBubble=true;e.setSelection([w.id])}}
               onTap={ev=>{ev.cancelBubble=true;e.setSelection([w.id])}}
             />
@@ -346,7 +299,7 @@ export function MapCanvas() {
                 y={a.y}
                 radius={7/e.viewport.scale}
                 fill="#ffffff"
-                stroke="#f97316"
+                stroke="#0284c7"
                 strokeWidth={2/e.viewport.scale}
                 draggable
                 onMouseEnter={ev=>setHandleCursor(ev,'grab')}
@@ -362,7 +315,7 @@ export function MapCanvas() {
                 y={b.y}
                 radius={7/e.viewport.scale}
                 fill="#ffffff"
-                stroke="#f97316"
+                stroke="#0284c7"
                 strokeWidth={2/e.viewport.scale}
                 draggable
                 onMouseEnter={ev=>setHandleCursor(ev,'grab')}
@@ -379,7 +332,7 @@ export function MapCanvas() {
                   y={a.y-17/e.viewport.scale}
                   text="START"
                   fontSize={8/e.viewport.scale}
-                  fill="#c2410c"
+                  fill="#0369a1"
                   listening={false}
                 />
                 <Text
@@ -387,7 +340,7 @@ export function MapCanvas() {
                   y={b.y-17/e.viewport.scale}
                   text="END"
                   fontSize={8/e.viewport.scale}
-                  fill="#c2410c"
+                  fill="#0369a1"
                   listening={false}
                 />
               </>}
@@ -397,17 +350,17 @@ export function MapCanvas() {
         {p.building.doors.map(d=>{const a=worldToPixel(d.start.x,d.start.y,p.metadata),b=worldToPixel(d.end.x,d.end.y,p.metadata);return <Group key={d.id}><Line points={[a.x,a.y,b.x,b.y]} stroke={e.selection.includes(d.id)?'#0284c7':'#f59e0b'} strokeWidth={4/e.viewport.scale} dash={[7/e.viewport.scale,3/e.viewport.scale]} hitStrokeWidth={12/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([d.id])}}/>{e.layers.labels.visible&&<Text x={(a.x+b.x)/2} y={(a.y+b.y)/2-12/e.viewport.scale} text={d.name} fontSize={9/e.viewport.scale} fill="#92400e"/>}</Group>})}
         {p.building.models.map(m=>{const v=worldToPixel(m.x,m.y,p.metadata);return <Group key={m.id} x={v.x} y={v.y} onClick={ev=>{ev.cancelBubble=true;e.setSelection([m.id])}}><Rect x={-6/e.viewport.scale} y={-6/e.viewport.scale} width={12/e.viewport.scale} height={12/e.viewport.scale} fill="#7c3aed" stroke={e.selection.includes(m.id)?'#0284c7':'#5b21b6'} strokeWidth={2/e.viewport.scale}/>{e.layers.labels.visible&&<Text x={8/e.viewport.scale} y={-7/e.viewport.scale} text={m.name} fontSize={9/e.viewport.scale} fill="#5b21b6"/>}</Group>})}
         {p.building.measurements.map(m=>{const a=worldToPixel(m.start.x,m.start.y,p.metadata),b=worldToPixel(m.end.x,m.end.y,p.metadata);return <Group key={m.id}><Line points={[a.x,a.y,b.x,b.y]} stroke={e.selection.includes(m.id)?'#0284c7':'#16a34a'} dash={[5/e.viewport.scale,3/e.viewport.scale]} strokeWidth={2/e.viewport.scale} hitStrokeWidth={10/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([m.id])}}/><Text x={(a.x+b.x)/2} y={(a.y+b.y)/2} text={`${m.distance.toFixed(2)} m`} fontSize={9/e.viewport.scale} fill="#166534"/></Group>})}
-        {buildingDrawing&&<Line points={(buildingDrawing.kind==='floor'?buildingDrawing.points:buildingDraftPoints).flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={buildingDrawing.kind==='floor'&&buildingDrawing.points.length>2} stroke={buildingDrawing.kind==='wall'?'#d97706':'#0284c7'} dash={[6/e.viewport.scale,4/e.viewport.scale]} fill={buildingDrawing.kind==='floor'?'rgba(2,132,199,.08)':undefined} strokeWidth={2/e.viewport.scale} lineCap="round" lineJoin="round"/>}
+        {buildingDrawing&&<Line points={buildingDrawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={buildingDrawing.kind==='floor'&&buildingDrawing.points.length>2} stroke="#0284c7" dash={[6/e.viewport.scale,4/e.viewport.scale]} fill={buildingDrawing.kind==='floor'?'rgba(2,132,199,.08)':undefined} strokeWidth={2/e.viewport.scale}/>}
       </Layer>}
 
-      {e.layers.zones.visible&&<Layer>{p.zones.map(z=>{const pts=z.polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={z.id}><Line points={pts} closed fill={zoneFill[z.type]} stroke={e.selection.includes(z.id)?'#0ea5e9':'#8b5e34'} strokeWidth={(e.selection.includes(z.id)?3:1.5)/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([z.id])}}/>{e.layers.labels.visible&&<Text x={pts[0]+5} y={pts[1]+5} text={z.name} fontSize={11/e.viewport.scale} fill="#684c2e"/>}{e.selection.includes(z.id)&&!e.layers.zones.locked&&z.polygon.map((q,i)=>{const v=worldToPixel(q.x,q.y,p.metadata);return <Circle key={i} x={v.x} y={v.y} radius={5/e.viewport.scale} fill="#fff" stroke="#0ea5e9" strokeWidth={2/e.viewport.scale} draggable onDragStart={()=>p.commit()} onDragEnd={ev=>{const poly=[...z.polygon];poly[i]=pixelToWorld(ev.target.x(),ev.target.y(),p.metadata);p.updateZone(z.id,{polygon:poly})}}/>})}</Group>})}</Layer>}
+      {e.layers.zones.visible&&<Layer listening={e.tool==='select'}>{p.zones.map(z=>{const pts=z.polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={z.id}><Line points={pts} closed fill={zoneFill[z.type]} stroke={e.selection.includes(z.id)?'#0ea5e9':'#8b5e34'} strokeWidth={(e.selection.includes(z.id)?3:1.5)/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([z.id])}}/>{e.layers.labels.visible&&<Text x={pts[0]+5} y={pts[1]+5} text={z.name} fontSize={11/e.viewport.scale} fill="#684c2e"/>}{e.selection.includes(z.id)&&!e.layers.zones.locked&&z.polygon.map((q,i)=>{const v=worldToPixel(q.x,q.y,p.metadata);return <Circle key={i} x={v.x} y={v.y} radius={5/e.viewport.scale} fill="#fff" stroke="#0ea5e9" strokeWidth={2/e.viewport.scale} draggable onDragStart={()=>p.commit()} onDragEnd={ev=>{const poly=[...z.polygon];poly[i]=pixelToWorld(ev.target.x(),ev.target.y(),p.metadata);p.updateZone(z.id,{polygon:poly})}}/>})}</Group>})}</Layer>}
 
-      {e.layers.paths.visible&&<Layer>{p.paths.map(path=>{
+      {e.layers.paths.visible&&<Layer listening={e.tool==='select'}>{p.paths.map(path=>{
           const pts=path.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});
           return <Group key={path.id}>
-            <Line points={pts} stroke={e.selection.includes(path.id)?'#0ea5e9':path.type==='restricted'?'#ef4444':'#475569'} strokeWidth={(e.selection.includes(path.id)?4:2.5)/e.viewport.scale} lineCap="round" lineJoin="round" hitStrokeWidth={12/e.viewport.scale} listening={e.tool === 'select'} onClick={ev=>{ev.cancelBubble=true;e.setSelection([path.id])}}/>
+            <Line points={pts} stroke={e.selection.includes(path.id)?'#0ea5e9':path.type==='restricted'?'#ef4444':'#475569'} strokeWidth={(e.selection.includes(path.id)?4:2.5)/e.viewport.scale} lineCap="round" lineJoin="round" hitStrokeWidth={12/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([path.id])}}/>
             <PathDirectionOverlay path={path} metadata={p.metadata} scale={e.viewport.scale} showBadge={e.layers.labels.visible} />
-            {e.tool==='select'&&e.selection.includes(path.id)&&!e.layers.paths.locked&&path.points.map((q,i)=>{
+            {e.selection.includes(path.id)&&!e.layers.paths.locked&&path.points.map((q,i)=>{
               const v=worldToPixel(q.x,q.y,p.metadata);
               const pointSelected=e.selectedPathPoint?.pathId===path.id&&e.selectedPathPoint.index===i;
               return <Circle key={i} x={v.x} y={v.y} radius={(pointSelected?7:5)/e.viewport.scale} fill={pointSelected?'#fee2e2':'#fff'} stroke={pointSelected?'#dc2626':'#0ea5e9'} strokeWidth={(pointSelected?3:2)/e.viewport.scale} draggable
@@ -426,11 +379,10 @@ export function MapCanvas() {
             })}
           </Group>
         })}
-        {drawing?.kind==='path'&&<Line points={pathDraftPoints.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>}
+        {drawing?.kind==='path'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>}
       {e.layers.paths.visible&&<Layer listening={false}>{pathJunctions.map((junction,index)=>{const v=worldToPixel(junction.x,junction.y,p.metadata);return <Group key={`junction-${index}`} x={v.x} y={v.y}><Circle radius={7/e.viewport.scale} fill="#16a34a" stroke="#fff" strokeWidth={2/e.viewport.scale}/><Circle radius={2/e.viewport.scale} fill="#fff"/>{e.layers.labels.visible&&<Text x={9/e.viewport.scale} y={-7/e.viewport.scale} text="CONNECTED" fontSize={8/e.viewport.scale} fill="#166534"/>}</Group>})}</Layer>}
-      {endpointSnapCandidates.length>0&&<Layer listening={false}>{endpointSnapCandidates.map((candidate,index)=>{const v=worldToPixel(candidate.point.x,candidate.point.y,p.metadata);const active=hoveredEndpointSnap===candidate;return <Group key={`snap-endpoint-${candidate.sourceKind}-${candidate.sourceId}-${candidate.endpoint}-${index}`} x={v.x} y={v.y}><Circle radius={(active?9:6)/e.viewport.scale} fill={active?'#facc15':'#ffffff'} stroke={active?'#a16207':'#0ea5e9'} strokeWidth={(active?3:2)/e.viewport.scale}/><Circle radius={2/e.viewport.scale} fill={active?'#854d0e':'#0ea5e9'}/>{active&&e.layers.labels.visible&&<Text x={11/e.viewport.scale} y={-8/e.viewport.scale} text={`SNAP ${candidate.label??''}`} fontSize={9/e.viewport.scale} fill="#854d0e"/>}</Group>})}</Layer>}
 
-      <Layer>{p.objects.map(o=>{const station=['charging_station','docking_station'].includes(o.type);if(station&&!e.layers.stations.visible)return null;if(!station&&!e.layers.waypoints.visible)return null;const v=worldToPixel(o.x,o.y,p.metadata),selected=e.selection.includes(o.id),locked=station?e.layers.stations.locked:e.layers.waypoints.locked;return <Group key={o.id} x={v.x} y={v.y} rotation={-o.yaw*180/Math.PI} listening={e.tool==='select'} draggable={e.tool==='select'&&!locked} onDragStart={()=>p.commit()} onDragEnd={ev=>p.updateObject(o.id,pixelToWorld(ev.target.x(),ev.target.y(),p.metadata))} onClick={ev=>{ev.cancelBubble=true;e.setSelection([o.id])}}><Circle radius={(station?8:6)/e.viewport.scale} fill={station?'#14b8a6':o.type==='home'?'#3b82f6':'#f8fafc'} stroke={selected?'#0ea5e9':'#26313b'} strokeWidth={(selected?3:1.5)/e.viewport.scale}/><Arrow points={[0,0,16/e.viewport.scale,0]} pointerLength={5/e.viewport.scale} pointerWidth={5/e.viewport.scale} stroke="#26313b" fill="#26313b" strokeWidth={1.5/e.viewport.scale}/>{e.layers.labels.visible&&<Text text={o.name} x={8/e.viewport.scale} y={-18/e.viewport.scale} fontSize={10/e.viewport.scale} fill="#1e293b" rotation={o.yaw*180/Math.PI}/>}</Group>})}{drawing?.kind==='zone'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={drawing.points.length>2} fill="rgba(14,165,233,.12)" stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>
+      <Layer listening={e.tool==='select'}>{p.objects.map(o=>{const station=['charging_station','docking_station'].includes(o.type);if(station&&!e.layers.stations.visible)return null;if(!station&&!e.layers.waypoints.visible)return null;const v=worldToPixel(o.x,o.y,p.metadata),selected=e.selection.includes(o.id),locked=station?e.layers.stations.locked:e.layers.waypoints.locked;return <Group key={o.id} x={v.x} y={v.y} rotation={-o.yaw*180/Math.PI} draggable={e.tool==='select'&&!locked} onDragStart={()=>p.commit()} onDragEnd={ev=>p.updateObject(o.id,pixelToWorld(ev.target.x(),ev.target.y(),p.metadata))} onClick={ev=>{ev.cancelBubble=true;e.setSelection([o.id])}}><Circle radius={(station?8:6)/e.viewport.scale} fill={station?'#14b8a6':o.type==='home'?'#3b82f6':'#f8fafc'} stroke={selected?'#0ea5e9':'#26313b'} strokeWidth={(selected?3:1.5)/e.viewport.scale}/><Arrow points={[0,0,16/e.viewport.scale,0]} pointerLength={5/e.viewport.scale} pointerWidth={5/e.viewport.scale} stroke="#26313b" fill="#26313b" strokeWidth={1.5/e.viewport.scale}/>{e.layers.labels.visible&&<Text text={o.name} x={8/e.viewport.scale} y={-18/e.viewport.scale} fontSize={10/e.viewport.scale} fill="#1e293b" rotation={o.yaw*180/Math.PI}/>}</Group>})}{drawing?.kind==='zone'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={drawing.points.length>2} fill="rgba(14,165,233,.12)" stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>
 
       {selectedObject && e.tool === 'select' && <Layer><RotationHandle object={selectedObject} scale={e.viewport.scale}/></Layer>}
       {(brushDrag || brushPreviewPoints.length > 0) && <Layer listening={false}><BrushPreview drag={brushDrag} polygon={brushPreviewPoints} scale={e.viewport.scale} color={e.brushColor}/></Layer>}
@@ -553,7 +505,7 @@ function RotationHandle({object,scale}:{object:{id:string;x:number;y:number;yaw:
       onDragMove={ev=>{ev.cancelBubble=true;update(ev.target.x(),ev.target.y())}}
       onDragEnd={ev=>{ev.cancelBubble=true;update(ev.target.x(),ev.target.y());const stage=ev.target.getStage();if(stage)stage.container().style.cursor='grab'}}
       onClick={ev=>{ev.cancelBubble=true}}/>
-    <Text x={origin.x+10/scale} y={origin.y+12/scale} text={`${headingLabel(object.yaw)}  ${radiansToDegrees(object.yaw).toFixed(1)}°`} fontSize={9/scale} fill="#c2410c" listening={false}/>
+    <Text x={origin.x+10/scale} y={origin.y+12/scale} text={`${headingLabel(object.yaw)}  ${radiansToDegrees(object.yaw).toFixed(1)}°`} fontSize={9/scale} fill="#0369a1" listening={false}/>
   </Group>;
 }
 
