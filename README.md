@@ -1774,6 +1774,69 @@ START ○────────────────○ END
 
 ---
 
+
+## Recommended Order for Building + Navigation
+
+ถ้าใช้งานทั้ง **Building Geometry** และ **Navigation Graph** แนะนำให้ทำตามลำดับนี้:
+
+```text
+Import / Clean Map
+        ↓
+Floor Area
+        ↓
+Walls
+        ↓
+Doors
+        ↓
+Navigation Objects
+        ↓
+Paths
+        ↓
+Zones
+        ↓
+Robot Configuration
+        ↓
+Validate
+        ↓
+Preview
+        ↓
+Save / Export
+```
+
+### ทำไมควรทำตามลำดับนี้
+
+- **Floor Area** ใช้กำหนดขอบเขตพื้นที่หลักของอาคาร
+- **Walls** ใช้สร้าง geometry ของผนังและสิ่งกีดขวางเชิงโครงสร้าง
+- **Doors** ควรวางหลัง Wall เพื่อให้ตำแหน่งสัมพันธ์กับแนวผนังจริง
+- **Navigation Objects** เช่น Home, Charging, Docking, Pickup/Drop-off และ Waypoint ควรวางหลัง geometry หลักชัดเจนแล้ว
+- **Paths** ควรสร้างหลัง Navigation Objects เพราะ Path คือ graph edge ที่เชื่อม node เหล่านี้
+- **Zones** ควรสร้างหลัง Path เพื่อให้เห็นชัดว่าพื้นที่ No-Go, Slow, Human Traffic หรือ Safety มีผลกับ routing อย่างไร
+- **Robot Configuration** ควรตั้งก่อน Validate เพื่อให้การตรวจ clearance และ footprint มีความหมาย
+- **Validate / Preview** ใช้ตรวจ topology, direction, clearance, geometry และตำแหน่ง entity ก่อน Save/Export
+
+> หมายเหตุ: โปรแกรมไม่ได้บังคับลำดับนี้ในเชิง technical และสามารถวาด Wall หรือ Path ก่อนกันได้ แต่ workflow ด้านบนช่วยลดการแก้ซ้ำและเหมาะกับการทำงานจริงมากกว่า
+
+### Navigation-first workflow
+
+ถ้าไม่ได้ใช้ RMF Building Geometry และต้องการทำเฉพาะ Navigation Map สามารถใช้ลำดับสั้นกว่าได้:
+
+```text
+Import / Clean Map
+        ↓
+Navigation Objects
+        ↓
+Paths
+        ↓
+Zones
+        ↓
+Robot Configuration
+        ↓
+Validate / Preview
+        ↓
+Save / Export
+```
+
+
 # Latest Version — v0.10.2
 
 ฟังก์ชันล่าสุดที่รวมอยู่ในเอกสารนี้:
