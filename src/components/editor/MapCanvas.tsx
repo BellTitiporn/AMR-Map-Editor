@@ -7,7 +7,7 @@ import { factoryObstacleRects } from '../../map-engine/factorySeed';
 import { distance, polylineLength } from '../../geometry/distance';
 import { polygonArea } from '../../geometry/polygon';
 import { headingLabel, normalizeAngle, radiansToDegrees } from '../../geometry/angles';
-import { collectPathJunctions, connectPathEndpoint, DEFAULT_PATH_SNAP_DISTANCE_M } from '../../geometry/pathTopology';
+import { collectPathJunctions, connectPathEndpoint, closestPointOnSegment, DEFAULT_PATH_SNAP_DISTANCE_M } from '../../geometry/pathTopology';
 import { paintOccupancy, paintOccupancyShape } from '../../services/mapEditing/occupancyEditor';
 import type { MapMetadata, NavigationPath } from '../../models';
 
@@ -18,6 +18,44 @@ const zoneFill: Record<string, string> = {
 type Point = { x: number; y: number };
 type BrushDrag = { kind: 'line' | 'rectangle'; start: Point; end: Point };
 const brushSizes = [1, 3, 5, 10, 20, 50];
+
+
+type DrawSnapTarget = {
+  kind: 'object' | 'path_vertex' | 'path_segment';
+  point: Point;
+  label: string;
+  distance: number;
+};
+
+function findDrawSnapTarget(point: Point, paths: NavigationPath[], objects: Array<{id:string;name:string;x:number;y:number}>, maxDistance = DEFAULT_PATH_SNAP_DISTANCE_M): DrawSnapTarget | null {
+  const candidates: DrawSnapTarget[] = [];
+  const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  for (const object of objects) {
+    const target = { x: object.x, y: object.y };
+    const d = dist(point, target);
+    if (d <= maxDistance) candidates.push({ kind: 'object', point: target, label: object.name, distance: d });
+  }
+
+  for (const path of paths) {
+    path.points.forEach((vertex, index) => {
+      const d = dist(point, vertex);
+      if (d <= maxDistance) candidates.push({ kind: 'path_vertex', point: { ...vertex }, label: `${path.name} • P${index + 1}`, distance: d });
+    });
+
+    for (let i = 0; i < path.points.length - 1; i += 1) {
+      const projected = closestPointOnSegment(point, path.points[i], path.points[i + 1]);
+      if (projected.t <= 1e-6 || projected.t >= 1 - 1e-6) continue;
+      if (projected.distance <= maxDistance) {
+        candidates.push({ kind: 'path_segment', point: projected.point, label: `${path.name} • segment`, distance: projected.distance });
+      }
+    }
+  }
+
+  const priority = { object: 0, path_vertex: 1, path_segment: 2 } as const;
+  candidates.sort((a, b) => Math.abs(a.distance - b.distance) > 1e-9 ? a.distance - b.distance : priority[a.kind] - priority[b.kind]);
+  return candidates[0] ?? null;
+}
 
 export function MapCanvas() {
   const wrap = useRef<HTMLDivElement>(null);
@@ -196,7 +234,10 @@ export function MapCanvas() {
   };
 
   const click = (evt: any) => {
-    const w = pointerWorld(evt); e.setCursor(w);
+    const raw = pointerWorld(evt);
+    const snap = e.tool === 'path' ? findDrawSnapTarget(raw, p.paths, p.objects) : null;
+    const w = snap?.point ?? raw;
+    e.setCursor(w);
     if (e.tool === 'building' && e.buildingTool) { addBuildingPoint(w); return; }
     if (e.tool === 'brush' && e.brushShape === 'polygon') {
       setBrushPolygon(points => [...points, w]);
@@ -232,6 +273,7 @@ export function MapCanvas() {
   const measurementPoints=hover&&e.tool==='measure'&&measure.length?[...measure,hover]:measure;
   const measurementTotal=e.measureMode==='area'&&measure.length>=3?polygonArea(measure):polylineLength(measure);
   const pathJunctions = collectPathJunctions(p.paths, p.objects);
+  const pathSnapTarget = e.tool === 'path' && hover ? findDrawSnapTarget(hover, p.paths, p.objects) : null;
 
   const brushPreviewPoints = brushPolygon.length
     ? [...brushPolygon, ...(hover && e.tool === 'brush' && e.brushShape === 'polygon' ? [hover] : [])]
@@ -381,6 +423,8 @@ export function MapCanvas() {
         })}
         {drawing?.kind==='path'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>}
       {e.layers.paths.visible&&<Layer listening={false}>{pathJunctions.map((junction,index)=>{const v=worldToPixel(junction.x,junction.y,p.metadata);return <Group key={`junction-${index}`} x={v.x} y={v.y}><Circle radius={7/e.viewport.scale} fill="#16a34a" stroke="#fff" strokeWidth={2/e.viewport.scale}/><Circle radius={2/e.viewport.scale} fill="#fff"/>{e.layers.labels.visible&&<Text x={9/e.viewport.scale} y={-7/e.viewport.scale} text="CONNECTED" fontSize={8/e.viewport.scale} fill="#166534"/>}</Group>})}</Layer>}
+
+      {pathSnapTarget&&<Layer listening={false}>{(()=>{const v=worldToPixel(pathSnapTarget.point.x,pathSnapTarget.point.y,p.metadata);return <Group x={v.x} y={v.y}><Circle radius={11/e.viewport.scale} fill="rgba(34,197,94,.18)" stroke="#16a34a" strokeWidth={3/e.viewport.scale}/><Circle radius={4/e.viewport.scale} fill="#16a34a"/><Text x={14/e.viewport.scale} y={-9/e.viewport.scale} text={`SNAP • ${pathSnapTarget.label}`} fontSize={9/e.viewport.scale} fill="#166534"/></Group>})()}</Layer>}
 
       <Layer listening={e.tool==='select'}>{p.objects.map(o=>{const station=['charging_station','docking_station'].includes(o.type);if(station&&!e.layers.stations.visible)return null;if(!station&&!e.layers.waypoints.visible)return null;const v=worldToPixel(o.x,o.y,p.metadata),selected=e.selection.includes(o.id),locked=station?e.layers.stations.locked:e.layers.waypoints.locked;return <Group key={o.id} x={v.x} y={v.y} rotation={-o.yaw*180/Math.PI} draggable={e.tool==='select'&&!locked} onDragStart={()=>p.commit()} onDragEnd={ev=>p.updateObject(o.id,pixelToWorld(ev.target.x(),ev.target.y(),p.metadata))} onClick={ev=>{ev.cancelBubble=true;e.setSelection([o.id])}}><Circle radius={(station?8:6)/e.viewport.scale} fill={station?'#14b8a6':o.type==='home'?'#3b82f6':'#f8fafc'} stroke={selected?'#0ea5e9':'#26313b'} strokeWidth={(selected?3:1.5)/e.viewport.scale}/><Arrow points={[0,0,16/e.viewport.scale,0]} pointerLength={5/e.viewport.scale} pointerWidth={5/e.viewport.scale} stroke="#26313b" fill="#26313b" strokeWidth={1.5/e.viewport.scale}/>{e.layers.labels.visible&&<Text text={o.name} x={8/e.viewport.scale} y={-18/e.viewport.scale} fontSize={10/e.viewport.scale} fill="#1e293b" rotation={o.yaw*180/Math.PI}/>}</Group>})}{drawing?.kind==='zone'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={drawing.points.length>2} fill="rgba(14,165,233,.12)" stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>
 
