@@ -7,9 +7,11 @@ import { factoryObstacleRects } from '../../map-engine/factorySeed';
 import { distance, polylineLength } from '../../geometry/distance';
 import { polygonArea } from '../../geometry/polygon';
 import { headingLabel, normalizeAngle, radiansToDegrees } from '../../geometry/angles';
-import { collectPathJunctions, connectPathEndpoint, closestPointOnSegment, DEFAULT_PATH_SNAP_DISTANCE_M } from '../../geometry/pathTopology';
+import { collectPathJunctions, connectPathEndpoint, DEFAULT_PATH_SNAP_DISTANCE_M } from '../../geometry/pathTopology';
+import { findDoorWallSnap, findPathDrawSnap, findWallEndpointSnap } from '../../geometry/snapEngine';
+import { entityLayersInteractive } from '../../map-engine/interactionPolicy';
 import { paintOccupancy, paintOccupancyShape } from '../../services/mapEditing/occupancyEditor';
-import type { MapMetadata, NavigationPath, BuildingWall } from '../../models';
+import type { MapMetadata, NavigationPath } from '../../models';
 
 const zoneFill: Record<string, string> = {
   no_go:'rgba(239,68,68,.22)', slow:'rgba(245,158,11,.20)', restricted:'rgba(168,85,247,.20)', parking:'rgba(59,130,246,.18)',
@@ -19,79 +21,6 @@ type Point = { x: number; y: number };
 type BrushDrag = { kind: 'line' | 'rectangle'; start: Point; end: Point };
 const brushSizes = [1, 3, 5, 10, 20, 50];
 
-
-type DrawSnapTarget = {
-  kind: 'object' | 'path_vertex' | 'path_segment';
-  point: Point;
-  label: string;
-  distance: number;
-};
-
-function findDrawSnapTarget(point: Point, paths: NavigationPath[], objects: Array<{id:string;name:string;x:number;y:number}>, maxDistance = DEFAULT_PATH_SNAP_DISTANCE_M): DrawSnapTarget | null {
-  const candidates: DrawSnapTarget[] = [];
-  const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
-
-  for (const object of objects) {
-    const target = { x: object.x, y: object.y };
-    const d = dist(point, target);
-    if (d <= maxDistance) candidates.push({ kind: 'object', point: target, label: object.name, distance: d });
-  }
-
-  for (const path of paths) {
-    path.points.forEach((vertex, index) => {
-      const d = dist(point, vertex);
-      if (d <= maxDistance) candidates.push({ kind: 'path_vertex', point: { ...vertex }, label: `${path.name} • P${index + 1}`, distance: d });
-    });
-
-    for (let i = 0; i < path.points.length - 1; i += 1) {
-      const projected = closestPointOnSegment(point, path.points[i], path.points[i + 1]);
-      if (projected.t <= 1e-6 || projected.t >= 1 - 1e-6) continue;
-      if (projected.distance <= maxDistance) {
-        candidates.push({ kind: 'path_segment', point: projected.point, label: `${path.name} • segment`, distance: projected.distance });
-      }
-    }
-  }
-
-  const priority = { object: 0, path_vertex: 1, path_segment: 2 } as const;
-  candidates.sort((a, b) => Math.abs(a.distance - b.distance) > 1e-9 ? a.distance - b.distance : priority[a.kind] - priority[b.kind]);
-  return candidates[0] ?? null;
-}
-
-
-type WallSnapTarget = {
-  wallId: string;
-  endpoint: 'start' | 'end';
-  point: Point;
-  label: string;
-  distance: number;
-};
-
-function findWallEndpointSnapTarget(
-  point: Point,
-  walls: BuildingWall[],
-  maxDistance = DEFAULT_PATH_SNAP_DISTANCE_M,
-  exclude?: { wallId: string; endpoint?: 'start' | 'end' },
-): WallSnapTarget | null {
-  const candidates: WallSnapTarget[] = [];
-  for (const wall of walls.filter(w => w.enabled)) {
-    for (const endpoint of ['start', 'end'] as const) {
-      if (exclude?.wallId === wall.id && (!exclude.endpoint || exclude.endpoint === endpoint)) continue;
-      const target = wall[endpoint];
-      const d = Math.hypot(point.x - target.x, point.y - target.y);
-      if (d <= maxDistance) {
-        candidates.push({
-          wallId: wall.id,
-          endpoint,
-          point: { ...target },
-          label: `${wall.name || wall.id} • ${endpoint.toUpperCase()}`,
-          distance: d,
-        });
-      }
-    }
-  }
-  candidates.sort((a, b) => a.distance - b.distance);
-  return candidates[0] ?? null;
-}
 
 export function MapCanvas() {
   const wrap = useRef<HTMLDivElement>(null);
@@ -105,6 +34,7 @@ export function MapCanvas() {
   const clipboard = useRef<{kind:'object'|'path'|'zone'; value: unknown} | null>(null);
   const [drawing, setDrawing] = useState<{kind:'path'|'zone'; points: Point[]} | null>(null);
   const [buildingDrawing, setBuildingDrawing] = useState<{kind:'wall'|'door'|'floor'|'measurement'; points: Point[]} | null>(null);
+  const [doorAnchorWallId, setDoorAnchorWallId] = useState<string | null>(null);
   const [brushDrag, setBrushDrag] = useState<BrushDrag | null>(null);
   const [brushPolygon, setBrushPolygon] = useState<Point[]>([]);
   const [measure, setMeasure] = useState<Point[]>([]);
@@ -117,6 +47,7 @@ export function MapCanvas() {
   }, []);
 
   useEffect(() => { if (e.tool !== 'measure') setMeasure([]); }, [e.tool]);
+  useEffect(() => { if (e.tool !== 'building' || e.buildingTool !== 'door') setDoorAnchorWallId(null); }, [e.tool, e.buildingTool]);
   useEffect(() => {
     if (e.tool !== 'brush') { setBrushDrag(null); setBrushPolygon([]); }
   }, [e.tool]);
@@ -262,7 +193,7 @@ export function MapCanvas() {
     if ((kind==='wall'||kind==='door'||kind==='measurement') && points.length===2) {
       p.commit(); const id=`${kind.toUpperCase()}-${crypto.randomUUID().slice(0,6)}`;
       if(kind==='wall') p.addWall({id,name:id,start:points[0],end:points[1],enabled:true,alpha:1,textureName:'wall_white',textureScale:1,textureWidth:1,textureHeight:2.5});
-      if(kind==='door') p.addDoor({id,name:id,start:points[0],end:points[1],enabled:true,type:'hinged',motionAxis:'start',motionDegrees:90,motionDirection:1,plugin:'normal',rightLeftRatio:1});
+      if(kind==='door') { p.addDoor({id,name:id,start:points[0],end:points[1],enabled:true,type:'hinged',motionAxis:'start',motionDegrees:90,motionDirection:1,plugin:'normal',rightLeftRatio:1}); setDoorAnchorWallId(null); }
       if(kind==='measurement') p.addMeasurement({id,name:id,start:points[0],end:points[1],distance:distance(points[0],points[1]),enabled:true});
       e.setSelection([id]); setBuildingDrawing(null); e.setBuildingTool(null); return;
     }
@@ -271,11 +202,20 @@ export function MapCanvas() {
 
   const click = (evt: any) => {
     const raw = pointerWorld(evt);
-    const pathSnap = e.tool === 'path' ? findDrawSnapTarget(raw, p.paths, p.objects) : null;
+    const pathSnap = e.tool === 'path' ? findPathDrawSnap(raw, p.objects, p.paths) : null;
     const wallSnap = e.tool === 'building' && e.buildingTool === 'wall'
-      ? findWallEndpointSnapTarget(raw, p.building.walls)
+      ? findWallEndpointSnap(raw, p.building.walls)
       : null;
-    const w = pathSnap?.point ?? wallSnap?.point ?? raw;
+    const doorSnap = e.tool === 'building' && e.buildingTool === 'door'
+      ? findDoorWallSnap(raw, p.building.walls, {
+          maxDistance: doorAnchorWallId ? DEFAULT_PATH_SNAP_DISTANCE_M * 3 : DEFAULT_PATH_SNAP_DISTANCE_M,
+          wallId: doorAnchorWallId ?? undefined,
+        })
+      : null;
+    const w = pathSnap?.point ?? wallSnap?.point ?? doorSnap?.point ?? raw;
+    if (e.tool === 'building' && e.buildingTool === 'door' && !buildingDrawing?.points.length && doorSnap) {
+      setDoorAnchorWallId(doorSnap.targetId);
+    }
     e.setCursor(w);
     if (e.tool === 'building' && e.buildingTool) { addBuildingPoint(w); return; }
     if (e.tool === 'brush' && e.brushShape === 'polygon') {
@@ -312,10 +252,17 @@ export function MapCanvas() {
   const measurementPoints=hover&&e.tool==='measure'&&measure.length?[...measure,hover]:measure;
   const measurementTotal=e.measureMode==='area'&&measure.length>=3?polygonArea(measure):polylineLength(measure);
   const pathJunctions = collectPathJunctions(p.paths, p.objects);
-  const pathSnapTarget = e.tool === 'path' && hover ? findDrawSnapTarget(hover, p.paths, p.objects) : null;
+  const pathSnapTarget = e.tool === 'path' && hover ? findPathDrawSnap(hover, p.objects, p.paths) : null;
   const wallSnapTarget = e.tool === 'building' && e.buildingTool === 'wall' && hover
-    ? findWallEndpointSnapTarget(hover, p.building.walls)
+    ? findWallEndpointSnap(hover, p.building.walls)
     : null;
+  const doorSnapTarget = e.tool === 'building' && e.buildingTool === 'door' && hover
+    ? findDoorWallSnap(hover, p.building.walls, {
+        maxDistance: doorAnchorWallId ? DEFAULT_PATH_SNAP_DISTANCE_M * 3 : DEFAULT_PATH_SNAP_DISTANCE_M,
+        wallId: doorAnchorWallId ?? undefined,
+      })
+    : null;
+  const entityListening = entityLayersInteractive({ tool: e.tool, placementObject: e.placementObject });
 
   const brushPreviewPoints = brushPolygon.length
     ? [...brushPolygon, ...(hover && e.tool === 'brush' && e.brushShape === 'polygon' ? [hover] : [])]
@@ -349,7 +296,7 @@ export function MapCanvas() {
         <Origin scale={e.viewport.scale}/>
       </Layer>
 
-      {e.layers.building.visible&&<Layer listening={e.tool==='select'&&!e.placementObject}>
+      {e.layers.building.visible&&<Layer listening={entityListening}>
         {p.building.floors.map(f=>{const pts=f.polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={f.id}><Line points={pts} closed fill="rgba(148,163,184,.14)" stroke={e.selection.includes(f.id)?'#0284c7':'#94a3b8'} strokeWidth={(e.selection.includes(f.id)?3:1.5)/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([f.id])}}/>{e.layers.labels.visible&&pts.length>=2&&<Text x={pts[0]+4} y={pts[1]+4} text={f.name} fontSize={9/e.viewport.scale} fill="#475569"/>}</Group>})}
         {p.building.walls.map(w=>{
           const a=worldToPixel(w.start.x,w.start.y,p.metadata);
@@ -360,7 +307,7 @@ export function MapCanvas() {
           const updateEndpoint=(endpoint:'start'|'end',x:number,y:number,snap=false)=>{
             const raw=pixelToWorld(x,y,p.metadata);
             const target=snap
-              ? findWallEndpointSnapTarget(raw,p.building.walls,DEFAULT_PATH_SNAP_DISTANCE_M,{wallId:w.id,endpoint})
+              ? findWallEndpointSnap(raw,p.building.walls,{maxDistance:DEFAULT_PATH_SNAP_DISTANCE_M,excludeWall:{wallId:w.id,endpoint}})
               : null;
             const world=target?.point ?? raw;
             p.updateWall(w.id,endpoint==='start'?{start:world}:{end:world});
@@ -442,9 +389,9 @@ export function MapCanvas() {
         {buildingDrawing&&<Line points={buildingDrawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={buildingDrawing.kind==='floor'&&buildingDrawing.points.length>2} stroke={buildingDrawing.kind==='wall'?'#7c3aed':'#0284c7'} dash={[6/e.viewport.scale,4/e.viewport.scale]} fill={buildingDrawing.kind==='floor'?'rgba(2,132,199,.08)':undefined} strokeWidth={2/e.viewport.scale}/>}
       </Layer>}
 
-      {e.layers.zones.visible&&<Layer listening={e.tool==='select'&&!e.placementObject}>{p.zones.map(z=>{const pts=z.polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={z.id}><Line points={pts} closed fill={zoneFill[z.type]} stroke={e.selection.includes(z.id)?'#0ea5e9':'#8b5e34'} strokeWidth={(e.selection.includes(z.id)?3:1.5)/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([z.id])}}/>{e.layers.labels.visible&&<Text x={pts[0]+5} y={pts[1]+5} text={z.name} fontSize={11/e.viewport.scale} fill="#684c2e"/>}{e.selection.includes(z.id)&&!e.layers.zones.locked&&z.polygon.map((q,i)=>{const v=worldToPixel(q.x,q.y,p.metadata);return <Circle key={i} x={v.x} y={v.y} radius={5/e.viewport.scale} fill="#fff" stroke="#0ea5e9" strokeWidth={2/e.viewport.scale} draggable onDragStart={()=>p.commit()} onDragEnd={ev=>{const poly=[...z.polygon];poly[i]=pixelToWorld(ev.target.x(),ev.target.y(),p.metadata);p.updateZone(z.id,{polygon:poly})}}/>})}</Group>})}</Layer>}
+      {e.layers.zones.visible&&<Layer listening={entityListening}>{p.zones.map(z=>{const pts=z.polygon.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});return <Group key={z.id}><Line points={pts} closed fill={zoneFill[z.type]} stroke={e.selection.includes(z.id)?'#0ea5e9':'#8b5e34'} strokeWidth={(e.selection.includes(z.id)?3:1.5)/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([z.id])}}/>{e.layers.labels.visible&&<Text x={pts[0]+5} y={pts[1]+5} text={z.name} fontSize={11/e.viewport.scale} fill="#684c2e"/>}{e.selection.includes(z.id)&&!e.layers.zones.locked&&z.polygon.map((q,i)=>{const v=worldToPixel(q.x,q.y,p.metadata);return <Circle key={i} x={v.x} y={v.y} radius={5/e.viewport.scale} fill="#fff" stroke="#0ea5e9" strokeWidth={2/e.viewport.scale} draggable onDragStart={()=>p.commit()} onDragEnd={ev=>{const poly=[...z.polygon];poly[i]=pixelToWorld(ev.target.x(),ev.target.y(),p.metadata);p.updateZone(z.id,{polygon:poly})}}/>})}</Group>})}</Layer>}
 
-      {e.layers.paths.visible&&<Layer listening={e.tool==='select'&&!e.placementObject}>{p.paths.map(path=>{
+      {e.layers.paths.visible&&<Layer listening={entityListening}>{p.paths.map(path=>{
           const pts=path.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]});
           return <Group key={path.id}>
             <Line points={pts} stroke={e.selection.includes(path.id)?'#0ea5e9':path.type==='restricted'?'#ef4444':'#475569'} strokeWidth={(e.selection.includes(path.id)?4:2.5)/e.viewport.scale} lineCap="round" lineJoin="round" hitStrokeWidth={12/e.viewport.scale} onClick={ev=>{ev.cancelBubble=true;e.setSelection([path.id])}}/>
@@ -475,7 +422,9 @@ export function MapCanvas() {
 
       {wallSnapTarget&&<Layer listening={false}>{(()=>{const v=worldToPixel(wallSnapTarget.point.x,wallSnapTarget.point.y,p.metadata);return <Group x={v.x} y={v.y}><Circle radius={12/e.viewport.scale} fill="rgba(245,158,11,.20)" stroke="#f59e0b" strokeWidth={3/e.viewport.scale}/><Circle radius={4/e.viewport.scale} fill="#7c3aed"/><Text x={15/e.viewport.scale} y={-9/e.viewport.scale} text={`SNAP • ${wallSnapTarget.label}`} fontSize={9/e.viewport.scale} fill="#92400e"/></Group>})()}</Layer>}
 
-      <Layer listening={e.tool==='select'&&!e.placementObject}>{p.objects.map(o=>{const station=['charging_station','docking_station'].includes(o.type);if(station&&!e.layers.stations.visible)return null;if(!station&&!e.layers.waypoints.visible)return null;const v=worldToPixel(o.x,o.y,p.metadata),selected=e.selection.includes(o.id),locked=station?e.layers.stations.locked:e.layers.waypoints.locked;return <Group key={o.id} x={v.x} y={v.y} rotation={-o.yaw*180/Math.PI} draggable={e.tool==='select'&&!locked} onDragStart={()=>p.commit()} onDragEnd={ev=>p.updateObject(o.id,pixelToWorld(ev.target.x(),ev.target.y(),p.metadata))} onClick={ev=>{ev.cancelBubble=true;e.setSelection([o.id])}}><Circle radius={(station?8:6)/e.viewport.scale} fill={station?'#14b8a6':o.type==='home'?'#3b82f6':'#f8fafc'} stroke={selected?'#0ea5e9':'#26313b'} strokeWidth={(selected?3:1.5)/e.viewport.scale}/><Arrow points={[0,0,16/e.viewport.scale,0]} pointerLength={5/e.viewport.scale} pointerWidth={5/e.viewport.scale} stroke="#26313b" fill="#26313b" strokeWidth={1.5/e.viewport.scale}/>{e.layers.labels.visible&&<Text text={o.name} x={8/e.viewport.scale} y={-18/e.viewport.scale} fontSize={10/e.viewport.scale} fill="#1e293b" rotation={o.yaw*180/Math.PI}/>}</Group>})}{drawing?.kind==='zone'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={drawing.points.length>2} fill="rgba(14,165,233,.12)" stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>
+      {doorSnapTarget&&<Layer listening={false}>{(()=>{const v=worldToPixel(doorSnapTarget.point.x,doorSnapTarget.point.y,p.metadata);return <Group x={v.x} y={v.y}><Circle radius={12/e.viewport.scale} fill="rgba(14,165,233,.18)" stroke="#0284c7" strokeWidth={3/e.viewport.scale}/><Circle radius={4/e.viewport.scale} fill="#f59e0b"/><Text x={15/e.viewport.scale} y={-9/e.viewport.scale} text={`DOOR SNAP • ${doorSnapTarget.label}`} fontSize={9/e.viewport.scale} fill="#075985"/></Group>})()}</Layer>}
+
+      <Layer listening={entityListening}>{p.objects.map(o=>{const station=['charging_station','docking_station'].includes(o.type);if(station&&!e.layers.stations.visible)return null;if(!station&&!e.layers.waypoints.visible)return null;const v=worldToPixel(o.x,o.y,p.metadata),selected=e.selection.includes(o.id),locked=station?e.layers.stations.locked:e.layers.waypoints.locked;return <Group key={o.id} x={v.x} y={v.y} rotation={-o.yaw*180/Math.PI} draggable={e.tool==='select'&&!locked} onDragStart={()=>p.commit()} onDragEnd={ev=>p.updateObject(o.id,pixelToWorld(ev.target.x(),ev.target.y(),p.metadata))} onClick={ev=>{ev.cancelBubble=true;e.setSelection([o.id])}}><Circle radius={(station?8:6)/e.viewport.scale} fill={station?'#14b8a6':o.type==='home'?'#3b82f6':'#f8fafc'} stroke={selected?'#0ea5e9':'#26313b'} strokeWidth={(selected?3:1.5)/e.viewport.scale}/><Arrow points={[0,0,16/e.viewport.scale,0]} pointerLength={5/e.viewport.scale} pointerWidth={5/e.viewport.scale} stroke="#26313b" fill="#26313b" strokeWidth={1.5/e.viewport.scale}/>{e.layers.labels.visible&&<Text text={o.name} x={8/e.viewport.scale} y={-18/e.viewport.scale} fontSize={10/e.viewport.scale} fill="#1e293b" rotation={o.yaw*180/Math.PI}/>}</Group>})}{drawing?.kind==='zone'&&<Line points={drawing.points.flatMap(q=>{const v=worldToPixel(q.x,q.y,p.metadata);return[v.x,v.y]})} closed={drawing.points.length>2} fill="rgba(14,165,233,.12)" stroke="#0ea5e9" dash={[6,4]} strokeWidth={2/e.viewport.scale}/>}</Layer>
 
       {selectedObject && e.tool === 'select' && <Layer><RotationHandle object={selectedObject} scale={e.viewport.scale}/></Layer>}
       {(brushDrag || brushPreviewPoints.length > 0) && <Layer listening={false}><BrushPreview drag={brushDrag} polygon={brushPreviewPoints} scale={e.viewport.scale} color={e.brushColor}/></Layer>}
