@@ -4,7 +4,7 @@ AMR Map Editor คือเว็บแอปสำหรับสร้าง �
 
 เวอร์ชันปัจจุบันใช้ **Light Theme** สำหรับงานวิศวกรรม และรองรับ workflow หลักตั้งแต่ Import ROS map ไปจนถึงสร้าง Navigation Objects, Paths, Zones, แก้ Occupancy Map, Preview, Validate, Save/Open และ Export Navigation JSON / ROS Map / RMF `.building.yaml`
 
-> Project version: **0.9.0**
+> Project version: **0.10.9**
 
 ---
 
@@ -1592,3 +1592,30 @@ START ○────────────────○ END
 - Snapping ถูกรวมไว้ที่ `src/geometry/snapEngine.ts` รองรับ Object, Path vertex/segment, Wall endpoint/segment
 - `Building → Door` สามารถ snap เข้ากับ Wall และพยายามรักษา Door สองจุดให้อยู่บน Wall เดียวกันโดยอัตโนมัติ
 - มี `DOOR SNAP` highlight ก่อนคลิก เพื่อให้เห็นตำแหน่งที่จะยึดจริง
+
+
+## RMF Traffic Editor Coordinate Compatibility (v0.10.9)
+
+RMF `.building.yaml` export uses `reference_image` coordinates so the geometry aligns with the
+exported occupancy PNG in Traffic Editor.
+
+AMR Map Editor internally stores geometry in ROS/world meters. During RMF export it converts every
+point into the source image pixel coordinate frame using map `resolution`, ROS `origin`, and
+`originYaw`, including the required image Y-axis flip.
+
+The exporter also creates a full-width measurement equal to:
+
+```text
+image_width × resolution
+```
+
+so Traffic Editor derives the same meters-per-pixel scale as the ROS occupancy map.
+
+Always export and keep these files together:
+
+```text
+<name>.building.yaml
+<name>.png
+```
+
+Do not rename only one of the two files because the building YAML references the PNG by filename.
