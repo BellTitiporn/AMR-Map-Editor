@@ -4,7 +4,7 @@ AMR Map Editor คือเว็บแอปสำหรับสร้าง �
 
 เวอร์ชันปัจจุบันใช้ **Light Theme** สำหรับงานวิศวกรรม และรองรับ workflow หลักตั้งแต่ Import ROS map ไปจนถึงสร้าง Navigation Objects, Paths, Zones, แก้ Occupancy Map, Preview, Validate, Save/Open และ Export Navigation JSON / ROS Map / RMF `.building.yaml`
 
-> Project version: **0.10.9**
+> Project version: **0.11.0**
 
 ---
 
@@ -1619,3 +1619,41 @@ Always export and keep these files together:
 ```
 
 Do not rename only one of the two files because the building YAML references the PNG by filename.
+
+
+## RMF Bundle + Robot Heading (v0.11.0)
+
+Traffic Editor ไม่ได้ render custom vertex property `amr_yaw` เป็นลูกศร heading ของ Waypoint/Station โดยตรง
+
+AMR Map Editor จึง export ข้อมูล RMF และ robot pose แยกหน้าที่กัน:
+
+```text
+Export → RMF Bundle
+```
+
+จะได้ ZIP:
+
+```text
+<name>.building.yaml
+<name>.png
+<name>-navigation.json
+README.txt
+```
+
+- `.building.yaml` ใช้กับ Open-RMF / Traffic Editor และยังเก็บ `amr_yaw` ไว้เป็น custom property
+- `.png` เป็น reference image ที่ใช้กับ `.building.yaml`
+- `-navigation.json` เก็บ `x`, `y`, `yaw` และ `headingDegrees` ของ Navigation Objects เพื่อใช้กับ Fleet Manager / Nav2
+
+ตัวอย่าง:
+
+```json
+{
+  "name": "CHARGING_STATION-01",
+  "x": 36.79,
+  "y": 41.36,
+  "yaw": 1.5707963268,
+  "headingDegrees": 90
+}
+```
+
+ดังนั้นการไม่เห็น heading arrow ใน Traffic Editor ไม่ได้หมายความว่า orientation หาย ข้อมูล orientation ยังคงถูกเก็บไว้สำหรับ robot integration

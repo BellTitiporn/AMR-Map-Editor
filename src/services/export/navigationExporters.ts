@@ -33,6 +33,7 @@ export interface NavigationJsonPayload {
     x: number;
     y: number;
     yaw: number;
+    headingDegrees: number;
     enabled: boolean;
     description?: string;
     metadata: Record<string, unknown>;
@@ -106,6 +107,7 @@ export const navigationPayload = (
     x,
     y,
     yaw,
+    headingDegrees: yaw * 180 / Math.PI,
     enabled,
     ...(description ? { description } : {}),
     metadata: objectMetadata,
