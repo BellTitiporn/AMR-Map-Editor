@@ -1,0 +1,22 @@
+Add this field inside NavigationPath in src/models:
+
+orientation?: '' | 'forward' | 'backward';
+
+Example:
+
+export interface NavigationPath {
+  id: string;
+  name: string;
+  type: 'normal' | 'preferred' | 'one_way' | 'bidirectional' | 'restricted';
+  points: { x: number; y: number }[];
+  maxSpeed?: number;
+  width?: number;
+  safetyClearance?: number;
+  priority?: number;
+  robotTypes?: string[];
+
+  // RMF Traffic Editor lane orientation
+  orientation?: '' | 'forward' | 'backward';
+
+  enabled: boolean;
+}

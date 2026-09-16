@@ -138,7 +138,7 @@ export function buildingPayload(
       const params: Record<string, RmfParam> = {
         bidirectional: [BOOL, path.type !== 'one_way'],
         graph_idx: [INT, 0],
-        orientation: [STRING, ''],
+        orientation: [STRING, path.orientation ?? ''],
         speed_limit: [DOUBLE, path.maxSpeed ?? 0],
         amr_path_type: [STRING, path.type],
         amr_path_id: [STRING, path.id],

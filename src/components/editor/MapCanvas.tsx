@@ -64,7 +64,7 @@ export function MapCanvas() {
     if (drawing.kind === 'path' && drawing.points.length > 1) {
       p.commit();
       const id = 'P-' + crypto.randomUUID().slice(0, 8);
-      const created: NavigationPath = { id, name: 'New Path', type: e.pathType, points: drawing.points, width: 1, maxSpeed: 1, enabled: true };
+      const created: NavigationPath = { id, name: 'New Path', type: e.pathType, points: drawing.points, width: 1, maxSpeed: 1, orientation: '', enabled: true };
       let nextPaths = [...p.paths, created];
       nextPaths = connectPathEndpoint(nextPaths, p.objects, id, 'start', DEFAULT_PATH_SNAP_DISTANCE_M).paths;
       nextPaths = connectPathEndpoint(nextPaths, p.objects, id, 'end', DEFAULT_PATH_SNAP_DISTANCE_M).paths;
@@ -451,9 +451,11 @@ export function MapCanvas() {
 
 
 function PathDirectionOverlay({ path, metadata, scale, showBadge }: { path: NavigationPath; metadata: MapMetadata; scale: number; showBadge: boolean }) {
-  if (path.type !== 'one_way' && path.type !== 'bidirectional') return null;
-  const stroke = path.type === 'one_way' ? '#075985' : '#17643b';
-  const arrows = path.points.slice(0, -1).flatMap((q, i) => {
+  const orientation = path.orientation ?? '';
+  const hasTravelDirection = path.type === 'one_way' || path.type === 'bidirectional';
+  if (!hasTravelDirection && !orientation) return null;
+  const stroke = path.type === 'one_way' ? '#075985' : path.type === 'bidirectional' ? '#17643b' : '#475569';
+  const arrows = hasTravelDirection ? path.points.slice(0, -1).flatMap((q, i) => {
     const a = worldToPixel(q.x, q.y, metadata);
     const b = worldToPixel(path.points[i + 1].x, path.points[i + 1].y, metadata);
     const dx = b.x - a.x, dy = b.y - a.y;
@@ -470,7 +472,7 @@ function PathDirectionOverlay({ path, metadata, scale, showBadge }: { path: Navi
       <Arrow key={`two-f-${i}`} points={[mx-ux*half+nx*off,my-uy*half+ny*off,mx+ux*half+nx*off,my+uy*half+ny*off]} pointerLength={5.5/scale} pointerWidth={5.5/scale} stroke={stroke} fill={stroke} strokeWidth={1.4/scale}/>,
       <Arrow key={`two-r-${i}`} points={[mx+ux*half-nx*off,my+uy*half-ny*off,mx-ux*half-nx*off,my-uy*half-ny*off]} pointerLength={5.5/scale} pointerWidth={5.5/scale} stroke={stroke} fill={stroke} strokeWidth={1.4/scale}/>
     ];
-  });
+  }) : [];
 
   if (!showBadge || path.points.length < 2) return <>{arrows}</>;
   const segmentIndex = Math.min(path.points.length - 2, Math.floor((path.points.length - 1) / 2));
@@ -478,14 +480,20 @@ function PathDirectionOverlay({ path, metadata, scale, showBadge }: { path: Navi
   const b = worldToPixel(path.points[segmentIndex + 1].x, path.points[segmentIndex + 1].y, metadata);
   const x = (a.x + b.x) / 2;
   const y = (a.y + b.y) / 2 - 18 / scale;
-  const text = path.type === 'one_way' ? 'ONE-WAY  A → B' : 'TWO-WAY  A ↔ B';
-  const width = (path.type === 'one_way' ? 88 : 90) / scale;
+  const text = path.type === 'one_way' ? 'ONE-WAY  A → B' : path.type === 'bidirectional' ? 'TWO-WAY  A ↔ B' : 'PATH';
+  const width = (path.type === 'one_way' ? 88 : path.type === 'bidirectional' ? 90 : 46) / scale;
+  const orientationText = orientation === 'forward' ? 'ORIENTATION: FORWARD' : orientation === 'backward' ? 'ORIENTATION: BACKWARD' : '';
+  const orientationWidth = 118 / scale;
   return <>
     {arrows}
-    <Group x={x-width/2} y={y} listening={false}>
+    {hasTravelDirection && <Group x={x-width/2} y={y} listening={false}>
       <Rect width={width} height={16/scale} fill="rgba(255,255,255,.94)" stroke={stroke} strokeWidth={1/scale} cornerRadius={2/scale}/>
       <Text width={width} height={16/scale} align="center" verticalAlign="middle" text={text} fontSize={8.5/scale} fontStyle="bold" fill={stroke}/>
-    </Group>
+    </Group>}
+    {orientationText && <Group x={x-orientationWidth/2} y={y + (hasTravelDirection ? 19/scale : 0)} listening={false}>
+      <Rect width={orientationWidth} height={16/scale} fill="rgba(255,255,255,.94)" stroke="#7c3aed" strokeWidth={1/scale} cornerRadius={2/scale}/>
+      <Text width={orientationWidth} height={16/scale} align="center" verticalAlign="middle" text={orientationText} fontSize={8/scale} fontStyle="bold" fill="#6d28d9"/>
+    </Group>}
   </>;
 }
 

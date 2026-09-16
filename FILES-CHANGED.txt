@@ -1,0 +1,30 @@
+AMR Path Orientation - changed files
+
+1) src/components/editor/MapCanvas.tsx
+   - Path creation now includes orientation default
+   - Path orientation can be visualized on the canvas
+
+2) src/services/export/buildingExporter.ts
+   - RMF lane orientation is exported from path.orientation
+   - Supports: "", "forward", "backward"
+
+3) NavigationPath model/interface
+   - Add: orientation?: '' | 'forward' | 'backward'
+   - Exact original models source was not available in the current runtime,
+     so the required change is provided in patches/NavigationPath-model.patch.txt
+
+4) Path Properties / Inspector component
+   - Add None / Forward / Backward controls
+   - Exact original Properties source was not available in the current runtime,
+     so the required component block is provided in patches/PathProperties-orientation.patch.tsx
+
+Expected RMF YAML:
+orientation:
+  - 1
+  - forward
+
+or
+
+orientation:
+  - 1
+  - backward
