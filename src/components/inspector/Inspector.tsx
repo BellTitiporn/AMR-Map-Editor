@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeftRight, ArrowRight, CircleCheck, GitMerge, Link2, Copy, RotateCcw, Trash2 } from 'lucide-react';
 import { useEditorStore } from '../../state/editorStore';
 import { useProjectStore } from '../../state/projectStore';
-import type { BuildingDoorType, BuildingWall, NavigationObject, NavigationPath, PathType, ReferenceCoordinatesConfig, ZoneType } from '../../models';
+import type { BuildingDoorType, BuildingWall, NavigationObject, NavigationPath, PathType, ZoneType } from '../../models';
 import { degreesToRadians, headingLabel, normalizeAngle, normalizeDegrees, radiansToDegrees } from '../../geometry/angles';
 import { connectPathEndpoint, DEFAULT_PATH_SNAP_DISTANCE_M, endpointConnectionStatus, findNearestMergeCandidate, mergeWithNearestPath } from '../../geometry/pathTopology';
 import { resizeWall, wallAngleDegrees, wallLength, type WallResizeAnchor } from '../../geometry/wall';
@@ -470,61 +470,29 @@ function BuildingConfig() {
   const b = p.building.config;
   const begin = () => p.commit();
 
-  const fallbackReference: ReferenceCoordinatesConfig = {
-    mapName: b.buildingName || p.metadata.name || '',
-    points: [],
-  };
+  const referenceFloors = p.building.floors
+    .filter(floor => floor.enabled && floor.polygon.length >= 3)
+    .map(floor => ({
+      floor,
+      area: Math.abs(
+        floor.polygon.reduce((sum, point, index) => {
+          const next = floor.polygon[(index + 1) % floor.polygon.length];
+          return sum + point.x * next.y - next.x * point.y;
+        }, 0),
+      ) / 2,
+    }))
+    .sort((a, b) => b.area - a.area);
 
-  const reference = b.referenceCoordinates ?? fallbackReference;
-
-  const updateReference = (next: ReferenceCoordinatesConfig) => {
-    p.updateBuildingConfig({ referenceCoordinates: next });
-  };
-
-  const updateReferencePoint = (
-    index: number,
-    side: 'rmf' | 'robot',
-    axis: 'x' | 'y',
-    value: number,
-  ) => {
-    const points = reference.points.map((pair, i) =>
-      i === index
-        ? {
-            ...pair,
-            [side]: {
-              ...pair[side],
-              [axis]: value,
-            },
-          }
-        : pair,
-    );
-
-    updateReference({
-      ...reference,
-      points,
-    });
-  };
-
-  const addReferencePoint = () => {
-    updateReference({
-      ...reference,
-      points: [
-        ...reference.points,
-        {
-          rmf: { x: 0, y: 0 },
-          robot: { x: 0, y: 0 },
-        },
-      ],
-    });
-  };
-
-  const removeReferencePoint = (index: number) => {
-    if (reference.points.length <= 2) return;
-    updateReference({
-      ...reference,
-      points: reference.points.filter((_, i) => i !== index),
-    });
-  };
+  const sourceFloor = referenceFloors[0]?.floor ?? null;
+  const sourcePoints = sourceFloor
+    ? sourceFloor.polygon.filter((point, index, points) =>
+        points.findIndex(
+          candidate =>
+            Math.abs(candidate.x - point.x) <= 1e-6 &&
+            Math.abs(candidate.y - point.y) <= 1e-6,
+        ) === index,
+      )
+    : [];
 
   return <div className="robotcfg">
     <div className="group-title">RMF BUILDING / LEVEL</div>
@@ -563,86 +531,33 @@ function BuildingConfig() {
     <div className="path-direction-card">
       <div className="path-direction-head">
         <div>
-          <span className="group-title">REFERENCE COORDINATES</span>
-          <small>RMF ↔ Robot coordinate calibration</small>
+          <span className="group-title">AUTO REFERENCE COORDINATES</span>
+          <b className={`path-direction-status ${sourceFloor ? 'twoway' : 'neutral'}`}>
+            {sourceFloor ? 'READY' : 'NO FLOOR'}
+          </b>
         </div>
       </div>
 
-      <Field
-        l="Map Name"
-        v={reference.mapName}
-        begin={begin}
-        on={v => updateReference({ ...reference, mapName: v })}
-      />
-
-      {reference.points.map((pair, index) => <div className="path-point-card" key={`ref-${index}`}>
-        <div className="path-point-head">
-          <div>
-            <span className="group-title">POINT {index + 1}</span>
-            <small>RMF point ↔ Robot point</small>
-          </div>
-          {reference.points.length > 2 && <button
-            type="button"
-            className="delete-path-point"
-            onClick={() => {
-              begin();
-              removeReferencePoint(index);
-            }}
-          >
-            Remove
-          </button>}
+      {sourceFloor ? <>
+        <div className="kv">
+          <span>Source Floor</span>
+          <b>{sourceFloor.name || sourceFloor.id}</b>
+        </div>
+        <div className="kv">
+          <span>Reference Vertices</span>
+          <b>{sourcePoints.length}</b>
         </div>
 
-        <div className="group-title">RMF</div>
-        <div className="twocol">
-          <NumberField
-            l="X"
-            v={pair.rmf.x}
-            step={0.01}
-            begin={begin}
-            on={v => updateReferencePoint(index, 'rmf', 'x', v)}
-          />
-          <NumberField
-            l="Y"
-            v={pair.rmf.y}
-            step={0.01}
-            begin={begin}
-            on={v => updateReferencePoint(index, 'rmf', 'y', v)}
-          />
+        <div className="path-direction-help">
+          Reference coordinates are generated automatically from the same Floor
+          polygon vertices used by GeoJSON. Each point is converted with the
+          same world → reference_image transform used by building.yaml, so
+          robot[i] and rmf[i] always represent the same physical position.
         </div>
-
-        <div className="group-title">ROBOT</div>
-        <div className="twocol">
-          <NumberField
-            l="X"
-            v={pair.robot.x}
-            step={0.01}
-            begin={begin}
-            on={v => updateReferencePoint(index, 'robot', 'x', v)}
-          />
-          <NumberField
-            l="Y"
-            v={pair.robot.y}
-            step={0.01}
-            begin={begin}
-            on={v => updateReferencePoint(index, 'robot', 'y', v)}
-          />
-        </div>
-      </div>)}
-
-      <button
-        type="button"
-        onClick={() => {
-          begin();
-          addReferencePoint();
-        }}
-      >
-        + Add Reference Point
-      </button>
-
-      <div className="path-direction-help">
-        Point order is preserved during export: rmf[0] ↔ robot[0], rmf[1] ↔ robot[1], etc.
-      </div>
+      </> : <div className="path-direction-help">
+        Create and enable a Floor polygon with at least 3 vertices. The largest
+        enabled Floor will be used automatically as the RMF ↔ Robot reference geometry.
+      </div>}
     </div>
   </div>;
 }

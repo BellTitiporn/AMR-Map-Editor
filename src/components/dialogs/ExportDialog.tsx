@@ -29,11 +29,11 @@ export function ExportDialog({onClose}:{onClose:()=>void}){
       else if(type==='zones')downloadZones(zs,`${base}-zones${selectedSuffix}.json`);
       else if(type==='navigation')downloadNavigation(p.metadata,os,ps,zs,[p.robot],`${base}-navigation${selectedSuffix}.json`);
       else if(type==='geojson')downloadGeoJson(p.metadata,os,ps,zs,p.building,`${base}${selectedSuffix}`);
-      else if(type==='referenceCoordinates')downloadReferenceCoordinatesYaml(p.building.config,base);
+      else if(type==='referenceCoordinates')downloadReferenceCoordinatesYaml(p.metadata,p.building,base);
       else if(type==='building')downloadBuildingYaml(p.metadata,p.objects,p.paths,p.building,base);
       else if(type==='rmfBundle'){
         if(!p.image)throw new Error('RMF Bundle export requires an occupancy map image.');
-        await exportRmfBundle(p.metadata,p.image,p.objects,p.paths,p.zones,p.building,[p.robot],base,p.building.config);
+        await exportRmfBundle(p.metadata,p.image,p.objects,p.paths,p.zones,p.building,[p.robot],base);
       }
       else{
         if(!p.image)throw new Error('No occupancy map image is loaded.');

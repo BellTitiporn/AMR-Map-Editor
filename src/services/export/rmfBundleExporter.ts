@@ -1,7 +1,6 @@
 import JSZip from 'jszip';
 import type {
   BuildingData,
-  BuildingLevelConfig,
   MapImageData,
   MapMetadata,
   MapZone,
@@ -62,7 +61,6 @@ export async function exportRmfBundle(
   building: BuildingData,
   robots: RobotConfig[],
   fileName = 'map',
-  referenceConfig?: BuildingLevelConfig,
 ): Promise<void> {
   const base = exportBaseName(fileName, 'map');
   const zip = new JSZip();
@@ -103,10 +101,19 @@ export async function exportRmfBundle(
     2,
   );
 
-  const referenceYaml =
-    generateReferenceCoordinatesYaml(
-      referenceConfig ?? building.config,
-    );
+  let referenceYaml: string | null = null;
+
+  try {
+    referenceYaml =
+      generateReferenceCoordinatesYaml(
+        metadata,
+        building,
+      );
+  } catch {
+    // RMF Bundle remains exportable when no valid Floor reference geometry exists.
+    // Standalone Reference Coordinates export will still show the validation error.
+    referenceYaml = null;
+  }
 
   zip.file(
     `${base}.building.yaml`,
@@ -123,10 +130,12 @@ export async function exportRmfBundle(
     navigationJson,
   );
 
-  zip.file(
-    `${base}-reference-coordinates.yaml`,
-    referenceYaml,
-  );
+  if (referenceYaml) {
+    zip.file(
+      `${base}-reference-coordinates.yaml`,
+      referenceYaml,
+    );
+  }
 
   zip.file(
     'README.txt',
@@ -142,10 +151,18 @@ export async function exportRmfBundle(
       `${base}-navigation.json`,
       '  AMR navigation objects, paths, zones, robot config, yaw and headingDegrees.',
       '',
-      `${base}-reference-coordinates.yaml`,
-      '  RMF <-> Robot coordinate correspondence points.',
-      '  Pairing is positional: rmf[0] <-> robot[0], rmf[1] <-> robot[1], etc.',
-      '',
+      ...(referenceYaml
+        ? [
+            `${base}-reference-coordinates.yaml`,
+            '  Auto-generated from matching Floor polygon vertices.',
+            '  robot[i] = GeoJSON/world coordinate.',
+            '  rmf[i] = the same physical point converted for building.yaml.',
+            '',
+          ]
+        : [
+            'Reference coordinates were not included because no enabled Floor polygon with at least 3 vertices was available.',
+            '',
+          ]),
     ].join('\n'),
   );
 

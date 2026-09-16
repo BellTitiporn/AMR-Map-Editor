@@ -24,9 +24,6 @@ type GraphPointFeature = {
   properties: {
     frame: '';
     id: number;
-    name?: string;
-    pickup_dispenser?: string;
-    dropoff_ingestor?: string;
   };
 };
 
@@ -85,41 +82,20 @@ export function generateGeoJson(
   _zones: MapZone[],
   building: BuildingData,
 ): ReferenceGraphGeoJson {
-  type PointProperties = {
-    name?: string;
-    pickup_dispenser?: string;
-    dropoff_ingestor?: string;
-  };
+  const points: XY[] = [];
 
-  type PointRecord = XY & {
-    properties: PointProperties;
-  };
-
-  const points: PointRecord[] = [];
-
-  const findOrAddPoint = (
-    point: XY,
-    properties: PointProperties = {},
-  ): number => {
+  const findOrAddPoint = (point: XY): number => {
     const existing = points.findIndex(
       p => samePoint(p, point),
     );
 
     if (existing >= 0) {
-      points[existing] = {
-        ...points[existing],
-        properties: {
-          ...points[existing].properties,
-          ...properties,
-        },
-      };
       return existing;
     }
 
     points.push({
       x: point.x,
       y: point.y,
-      properties: { ...properties },
     });
 
     return points.length - 1;
@@ -171,37 +147,10 @@ export function generateGeoJson(
   for (const object of objects) {
     if (!object.enabled) continue;
 
-    const pointProperties: {
-      name?: string;
-      pickup_dispenser?: string;
-      dropoff_ingestor?: string;
-    } = {
-      name: object.name || object.id,
-    };
-
-    if (object.type === 'pickup') {
-      pointProperties.pickup_dispenser =
-        typeof object.metadata?.pickup_dispenser === 'string' &&
-        object.metadata.pickup_dispenser.trim()
-          ? object.metadata.pickup_dispenser.trim()
-          : object.name || object.id;
-    }
-
-    if (object.type === 'dropoff') {
-      pointProperties.dropoff_ingestor =
-        typeof object.metadata?.dropoff_ingestor === 'string' &&
-        object.metadata.dropoff_ingestor.trim()
-          ? object.metadata.dropoff_ingestor.trim()
-          : object.name || object.id;
-    }
-
-    findOrAddPoint(
-      {
-        x: object.x,
-        y: object.y,
-      },
-      pointProperties,
-    );
+    findOrAddPoint({
+      x: object.x,
+      y: object.y,
+    });
   }
 
   /**
@@ -231,13 +180,6 @@ export function generateGeoJson(
       properties: {
         frame: '',
         id,
-        ...(point.properties.name ? { name: point.properties.name } : {}),
-        ...(point.properties.pickup_dispenser
-          ? { pickup_dispenser: point.properties.pickup_dispenser }
-          : {}),
-        ...(point.properties.dropoff_ingestor
-          ? { dropoff_ingestor: point.properties.dropoff_ingestor }
-          : {}),
       },
     }),
   );
