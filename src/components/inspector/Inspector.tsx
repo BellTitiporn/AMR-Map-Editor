@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeftRight, ArrowRight, CircleCheck, GitMerge, Link2, Copy, RotateCcw, Trash2 } from 'lucide-react';
 import { useEditorStore } from '../../state/editorStore';
 import { useProjectStore } from '../../state/projectStore';
-import type { BuildingDoorType, BuildingWall, NavigationObject, NavigationPath, PathType, ZoneType } from '../../models';
+import type { BuildingDoorType, BuildingWall, NavigationObject, NavigationPath, PathOrientation, PathType, ZoneType } from '../../models';
 import { degreesToRadians, headingLabel, normalizeAngle, normalizeDegrees, radiansToDegrees } from '../../geometry/angles';
 import { connectPathEndpoint, DEFAULT_PATH_SNAP_DISTANCE_M, endpointConnectionStatus, findNearestMergeCandidate, mergeWithNearestPath } from '../../geometry/pathTopology';
 import { resizeWall, wallAngleDegrees, wallLength, type WallResizeAnchor } from '../../geometry/wall';
@@ -61,6 +61,13 @@ export function Inspector() {
       <div className="inspector-title">PATH PROPERTIES</div>
       <Field l="Name" v={path.name} begin={begin} on={v => p.updatePath(path.id, { name: v })} />
       <PathDirectionControl type={path.type} onChange={type => { p.commit(); p.updatePath(path.id, { type }); }} />
+      <PathOrientationControl
+        orientation={path.orientation ?? ''}
+        onChange={orientation => {
+          p.commit();
+          p.updatePath(path.id, { orientation });
+        }}
+      />
       <SelectField l="Path Type" v={path.type} options={['normal', 'preferred', 'one_way', 'bidirectional', 'restricted']} begin={begin} on={v => p.updatePath(path.id, { type: v as PathType })} />
       <NumberField l="Max Speed (m/s)" v={path.maxSpeed ?? 1} begin={begin} on={v => p.updatePath(path.id, { maxSpeed: v })} />
       <NumberField l="Path Width (m)" v={path.width ?? 1} begin={begin} on={v => p.updatePath(path.id, { width: v })} />
@@ -334,6 +341,70 @@ function PathDirectionControl({ type, onChange }: { type: PathType; onChange: (t
       : isTwoWay
         ? 'The robot may traverse this path in either direction. Arrow pairs on the map indicate two-way travel.'
         : 'This path type does not explicitly define one-way/two-way travel. Choose a direction above if routing requires it.'}</div>
+  </div>;
+}
+
+
+function PathOrientationControl({
+  orientation,
+  onChange,
+}: {
+  orientation: PathOrientation;
+  onChange: (orientation: PathOrientation) => void;
+}) {
+  const status =
+    orientation === 'forward'
+      ? 'FORWARD'
+      : orientation === 'backward'
+        ? 'BACKWARD'
+        : 'NONE';
+
+  return <div className="path-direction-card">
+    <div className="path-direction-head">
+      <div>
+        <span className="group-title">ROBOT ORIENTATION</span>
+        <b className={`path-direction-status ${orientation ? 'oneway' : 'neutral'}`}>{status}</b>
+      </div>
+    </div>
+
+    <div className="path-direction-toggle" role="group" aria-label="RMF lane robot orientation">
+      <button
+        type="button"
+        className={orientation === '' ? 'active' : ''}
+        onClick={() => onChange('')}
+        title="No RMF lane orientation constraint"
+      >
+        <span><b>None</b><small>No constraint</small></span>
+      </button>
+
+      <button
+        type="button"
+        className={orientation === 'forward' ? 'active' : ''}
+        onClick={() => onChange('forward')}
+        title="Robot should face in the same direction as the lane"
+      >
+        <ArrowRight />
+        <span><b>Forward</b><small>Face A → B</small></span>
+      </button>
+
+      <button
+        type="button"
+        className={orientation === 'backward' ? 'active' : ''}
+        onClick={() => onChange('backward')}
+        title="Robot should face opposite to the lane direction"
+      >
+        <ArrowLeftRight />
+        <span><b>Backward</b><small>Face B → A</small></span>
+      </button>
+    </div>
+
+    <div className="path-direction-help">
+      {orientation === 'forward'
+        ? 'Traffic Editor orientation = forward. Robot heading follows the lane direction.'
+        : orientation === 'backward'
+          ? 'Traffic Editor orientation = backward. Robot heading is opposite the lane direction.'
+          : 'Traffic Editor orientation is empty. RMF does not apply a lane heading constraint.'}
+    </div>
   </div>;
 }
 
