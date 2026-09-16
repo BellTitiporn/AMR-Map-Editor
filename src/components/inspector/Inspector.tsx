@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeftRight, ArrowRight, CircleCheck, GitMerge, Link2, Copy, RotateCcw, Trash2 } from 'lucide-react';
 import { useEditorStore } from '../../state/editorStore';
 import { useProjectStore } from '../../state/projectStore';
-import type { BuildingDoorType, BuildingWall, NavigationObject, NavigationPath, PathType, ZoneType } from '../../models';
+import type { BuildingDoorType, BuildingWall, NavigationObject, NavigationPath, PathOrientation, PathType, ZoneType } from '../../models';
 import { degreesToRadians, headingLabel, normalizeAngle, normalizeDegrees, radiansToDegrees } from '../../geometry/angles';
 import { connectPathEndpoint, DEFAULT_PATH_SNAP_DISTANCE_M, endpointConnectionStatus, findNearestMergeCandidate, mergeWithNearestPath } from '../../geometry/pathTopology';
 import { resizeWall, wallAngleDegrees, wallLength, type WallResizeAnchor } from '../../geometry/wall';
@@ -94,6 +94,13 @@ export function Inspector() {
       <div className="inspector-title">PATH PROPERTIES</div>
       <Field l="Name" v={path.name} begin={begin} on={v => p.updatePath(path.id, { name: v })} />
       <PathDirectionControl type={path.type} onChange={type => { p.commit(); p.updatePath(path.id, { type }); }} />
+      <PathOrientationControl
+        orientation={path.orientation ?? ''}
+        onChange={orientation => {
+          p.commit();
+          p.updatePath(path.id, { orientation });
+        }}
+      />
       <SelectField l="Path Type" v={path.type} options={['normal', 'preferred', 'one_way', 'bidirectional', 'restricted']} begin={begin} on={v => p.updatePath(path.id, { type: v as PathType })} />
       <NumberField l="Max Speed (m/s)" v={path.maxSpeed ?? 1} begin={begin} on={v => p.updatePath(path.id, { maxSpeed: v })} />
       <NumberField l="Path Width (m)" v={path.width ?? 1} begin={begin} on={v => p.updatePath(path.id, { width: v })} />
@@ -367,6 +374,84 @@ function PathDirectionControl({ type, onChange }: { type: PathType; onChange: (t
       : isTwoWay
         ? 'The robot may traverse this path in either direction. Arrow pairs on the map indicate two-way travel.'
         : 'This path type does not explicitly define one-way/two-way travel. Choose a direction above if routing requires it.'}</div>
+  </div>;
+}
+
+
+function PathOrientationControl({
+  orientation,
+  onChange,
+}: {
+  orientation: PathOrientation;
+  onChange: (orientation: PathOrientation) => void;
+}) {
+  const isNone = orientation === '';
+  const isForward = orientation === 'forward';
+  const isBackward = orientation === 'backward';
+
+  const status = isForward
+    ? 'FORWARD'
+    : isBackward
+      ? 'BACKWARD'
+      : 'NONE';
+
+  return <div className="path-direction-card">
+    <div className="path-direction-head">
+      <div>
+        <span className="group-title">ROBOT ORIENTATION</span>
+        <b className={`path-direction-status ${isNone ? 'neutral' : 'oneway'}`}>
+          {status}
+        </b>
+      </div>
+    </div>
+
+    <div className="path-direction-toggle" role="group" aria-label="RMF lane orientation">
+      <button
+        type="button"
+        className={isNone ? 'active' : ''}
+        onClick={() => onChange('')}
+        title="No RMF lane orientation constraint"
+      >
+        <span>
+          <b>None</b>
+          <small>No constraint</small>
+        </span>
+      </button>
+
+      <button
+        type="button"
+        className={isForward ? 'active' : ''}
+        onClick={() => onChange('forward')}
+        title="Robot faces along the path vertex order A → B"
+      >
+        <ArrowRight />
+        <span>
+          <b>Forward</b>
+          <small>Face A → B</small>
+        </span>
+      </button>
+
+      <button
+        type="button"
+        className={isBackward ? 'active' : ''}
+        onClick={() => onChange('backward')}
+        title="Robot faces opposite to the path vertex order"
+      >
+        <ArrowLeftRight />
+        <span>
+          <b>Backward</b>
+          <small>Face B → A</small>
+        </span>
+      </button>
+    </div>
+
+    <div className="path-direction-help">
+      {isForward
+        ? 'Traffic Editor lane orientation = forward. The purple arrow follows A → B.'
+        : isBackward
+          ? 'Traffic Editor lane orientation = backward. The purple arrow points B → A.'
+          : 'Traffic Editor lane orientation is empty. No heading constraint is exported for this lane.'}
+    </div>
   </div>;
 }
 
