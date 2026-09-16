@@ -1,44 +1,187 @@
-# AMR Map Editor
+# 🤖 AMR Map Editor
 
-AMR Map Editor คือเว็บแอปสำหรับสร้าง แก้ไข ตรวจสอบ บันทึก และ Export แผนที่นำทางสำหรับ Autonomous Mobile Robot (AMR) โดยออกแบบให้มีลักษณะการใช้งานแบบ CAD / GIS / Industrial Robotics Engineering Tool
+> A CAD/GIS-style web application for creating, editing, validating, and exporting navigation maps for Autonomous Mobile Robots (AMRs).
 
-เวอร์ชันปัจจุบันใช้ **Light Theme** สำหรับงานวิศวกรรม และรองรับ workflow หลักตั้งแต่ Import ROS map ไปจนถึงสร้าง Navigation Objects, Paths, Zones, แก้ Occupancy Map, Preview, Validate, Save/Open และ Export Navigation JSON / ROS Map / RMF `.building.yaml`
+**Current version:** `0.11.0`  
+**UI:** Light engineering theme  
+**Primary outputs:** Navigation JSON, ROS Map, RMF `.building.yaml`, RMF Bundle
 
-> Project version: **0.11.0**
-
----
-
-## Quick Start — เริ่มใช้งานใน 5 นาที
-
-1. ติดตั้งและเปิดโปรแกรม
-   ```bash
-   npm install
-   npm run dev
-   ```
-2. เปิด URL ที่ Vite แสดง เช่น `http://localhost:5173`
-3. กด **Import** แล้วเลือก `map.yaml` + `map.pgm` พร้อมกัน
-4. กด **Fit Map** ถ้าแผนที่ไม่อยู่กลางจอ
-5. ไปที่ **Objects** แล้วสร้าง `HOME`, `Charging Station`, `Waypoint`
-6. ไปที่ **Paths** แล้วสร้างเส้นทางเชื่อมจุดสำคัญ
-7. ไปที่ **Zones** แล้วสร้าง `No-Go`, `Slow`, `Human Traffic` ตามต้องการ
-8. กดปุ่มรูป **ตา (Preview)** เพื่อตรวจภาพรวม ชื่อจุด Path และ Zone
-9. กด **Validate** เพื่อตรวจข้อผิดพลาด
-10. กด **Save** หรือ **Save As**
-11. กด **Export → Navigation JSON (Waypoints + Paths + Zones)** เพื่อได้ไฟล์ navigation รวม
+AMR Map Editor is designed for engineering workflows that start from a ROS occupancy map and continue through navigation-object creation, path planning, zone definition, validation, project saving, and export for ROS2 / Fleet Manager / Open-RMF workflows.
 
 ---
 
-## Heading / Orientation ของ Waypoint และ Station
+## ✨ Highlights
 
-ลูกศรที่ Navigation Object หมายถึง **ทิศที่ตัว Robot ควรหันเมื่ออยู่ที่จุดนั้น** ไม่ใช่ทิศทางของ Path
+- Import ROS maps from `map.yaml` + `map.pgm` / `map.png`
+- Edit occupancy maps with Freehand, Line, Rectangle, Polygon, and Eraser tools
+- Create Waypoints, Home, Charging, Docking, Pickup, Drop-off, Waiting, and Parking points
+- Create Normal, Preferred, One-way, Bidirectional, and Restricted paths
+- Create No-Go, Slow, Restricted, Parking, Loading, Unloading, Human Traffic, and Safety zones
+- Configure robot footprint, safety margin, clearance, turning radius, and speed
+- Preview heading, path direction, labels, and map entities
+- Validate geometry, connectivity, obstacles, zones, and robot clearance
+- Save projects locally with IndexedDB and export `.amrmap`
+- Export ROS maps, Navigation JSON, RMF `.building.yaml`, and RMF Bundle
+- Build RMF geometry including Walls, Doors, Floor Areas, Models, and Measurements
+- Snap paths, walls, objects, and doors for more reliable map topology
 
-เลือก Waypoint/Station แล้วกำหนดทิศได้ 3 วิธี:
+---
 
-1. กรอก **Heading (°)** เช่น `0`, `90`, `180`, `-90`
-2. กรอก **Yaw (rad)** เช่น `0`, `1.5708`, `3.1416`, `-1.5708`
-3. ลาก **blue rotation handle** ที่ปรากฏบน Canvas เมื่อเลือก Object
+## 🚀 Quick Start
 
-ค่าทั้งสองช่อง sync กันอัตโนมัติ และใช้ convention ของ world/map frame:
+### 1. Install
+
+```bash
+npm install
+npm run dev
+```
+
+Open the URL shown by Vite, usually:
+
+```text
+http://localhost:5173
+```
+
+### 2. Import a map
+
+For a ROS map, select both files together:
+
+```text
+map.yaml
+map.pgm
+```
+
+You can also import `PNG`, `JPG`, `PGM`, `.amrmap`, or supported JSON project data.
+
+### 3. Build the navigation map
+
+```text
+Import Map
+   ↓
+Clean / Edit Occupancy Map
+   ↓
+Add Navigation Objects
+   ↓
+Create Paths
+   ↓
+Create Zones
+   ↓
+Configure Robot
+   ↓
+Preview
+   ↓
+Validate
+   ↓
+Save
+   ↓
+Export
+```
+
+### 4. Recommended first workflow
+
+1. Import `map.yaml` + `map.pgm`
+2. Press **Fit Map**
+3. Verify resolution and origin
+4. Clean the occupancy map if needed
+5. Add `HOME`, `Charging Station`, `Pickup`, `Drop-off`, and Waypoints
+6. Create navigation paths
+7. Add operational zones
+8. Configure robot dimensions
+9. Open **Preview**
+10. Run **Validate**
+11. Save the project
+12. Export the required format
+
+---
+
+## 🧭 Main Workflow
+
+| Stage | Purpose |
+|---|---|
+| **Import** | Load ROS occupancy map or image |
+| **Edit Map** | Clean obstacles and map noise |
+| **Objects** | Create robot navigation poses |
+| **Paths** | Build the navigation graph |
+| **Zones** | Define No-Go, Slow, Human Traffic, etc. |
+| **Building** | Add RMF walls, doors, floors, models, measurements |
+| **Robot Config** | Configure footprint and motion constraints |
+| **Preview** | Inspect the complete map visually |
+| **Validate** | Detect geometry and navigation problems |
+| **Save** | Store local project state |
+| **Export** | Generate ROS / Navigation / RMF outputs |
+
+---
+
+## 🗺 Supported Data
+
+### Navigation Objects
+
+- Waypoint
+- Home
+- Charging Station
+- Docking Station
+- Pickup
+- Drop-off
+- Waiting
+- Parking
+
+### Path Types
+
+- Normal
+- Preferred
+- One-way
+- Bidirectional
+- Restricted
+
+### Zone Types
+
+- No-Go
+- Slow
+- Restricted
+- Parking
+- Loading
+- Unloading
+- Human Traffic
+- Safety
+
+### Building Geometry
+
+- Wall
+- Door
+- Floor Area
+- Model
+- Measurement
+
+---
+
+## 📤 Export Formats
+
+| Output | Use case |
+|---|---|
+| `.amrmap` | Reopen and continue editing a full project |
+| ROS Map ZIP | `map.yaml` + `map.pgm` |
+| Occupancy PNG | Preview / RMF reference image |
+| PGM | ROS occupancy map |
+| YAML | ROS map metadata |
+| Waypoints JSON | Navigation objects only |
+| Paths JSON | Navigation paths only |
+| Zones JSON | Zone definitions only |
+| Navigation JSON | Objects + Paths + Zones |
+| `.building.yaml` | Open-RMF / Traffic Editor |
+| RMF Bundle ZIP | `.building.yaml` + PNG + navigation JSON + README |
+
+---
+
+## 🧭 Heading vs Path Direction
+
+These are different concepts:
+
+| Arrow | Meaning |
+|---|---|
+| **Waypoint / Station arrow** | Robot orientation at that pose |
+| **One-way Path arrow** | Allowed travel direction along the path |
+
+Heading convention:
 
 ```text
 0° / 0 rad        = E (+X)
@@ -47,268 +190,107 @@ AMR Map Editor คือเว็บแอปสำหรับสร้าง �
 -90° / -π/2 rad   = S (-Y)
 ```
 
-มี preset buttons `0° E`, `90° N`, `180° W`, `-90° S` เพื่อกำหนดทิศได้เร็ว และ Canvas จะแสดง heading label ขณะเลือกจุด
-
-> หมายเหตุ: ลูกศรของ **One-way Path** หมายถึงทิศทางที่อนุญาตให้วิ่งบน Path ซึ่งเป็นคนละความหมายกับ heading arrow ของ Waypoint/Station
+Heading can be edited using degrees, radians, presets, or the rotation handle on the canvas.
 
 ---
 
-## Features
+## 🔗 Path Connectivity
 
-- Light engineering theme สำหรับ CAD/GIS/robotics workflow
-- Import ROS Map: YAML + PGM / PNG
-- Import PNG/JPG แบบระบุ resolution/origin เอง
-- PGM P2 / P5
-- Zoom to cursor / Pan / Fit Map
-- World coordinates หน่วยเมตร
-- Navigation Objects
-  - Waypoint
-  - Home
-  - Charging Station
-  - Docking Station
-  - Pickup
-  - Drop-off
-  - Waiting
-  - Parking
-- Path types
-  - Normal
-  - Preferred
-  - One-way
-  - Bidirectional
-  - Restricted
-- Zone types
-  - No-Go
-  - Slow
-  - Restricted
-  - Parking
-  - Loading
-  - Unloading
-  - Human Traffic
-  - Safety
-- Occupancy Brush
-  - Freehand
-  - Line
-  - Rectangle
-  - Polygon
-  - Brush size `1 / 3 / 5 / 10 / 20 / 50 px`
-  - Custom Brush Color Picker
-- Eraser restore จาก original imported map
-- Preview Mode สำหรับดูภาพรวมทั้งระบบ
-- Robot footprint preview
-- Validation panel และ issue navigation
-- Undo / Redo
-- Copy / Paste / Duplicate
-- IndexedDB Save + Autosave
-- `.amrmap` Save As / Open
-- Navigation JSON รวม Objects + Paths + Zones
-- ROS ZIP Export (`map.yaml` + `map.pgm`)
-- RMF Traffic Editor `.building.yaml` Export
+A path that visually touches another path is **not automatically connected**.
+
+Real connectivity is created when path topology shares the same coordinate / vertex.
+
+Connected junctions are shown with a green `CONNECTED` marker.
+
+The snap system supports:
+
+- Waypoints and Stations
+- Path vertices
+- Path segments
+- Wall endpoints
+- Wall segments
+
+When a path endpoint snaps to the middle of another path, the editor can insert a real vertex into the target path to create a valid junction.
 
 ---
 
-## สารบัญ
+## 🏗 RMF / Traffic Editor Integration
 
-- [1. Requirements](#1-requirements)
-- [2. Installation](#2-installation)
-- [3. Light Theme และหน้าจอหลัก](#3-light-theme-และหน้าจอหลัก)
-- [4. Import Map](#4-import-map)
-- [5. Coordinate Convention](#5-coordinate-convention)
-- [6. การควบคุม Map Canvas](#6-การควบคุม-map-canvas)
-- [7. Navigation Objects](#7-navigation-objects)
-- [8. Heading / Yaw](#8-heading--yaw)
-- [9. Paths และ Navigation Graph](#9-paths-และ-navigation-graph)
-- [10. Zones](#10-zones)
-- [11. Occupancy Brush Tools](#11-occupancy-brush-tools)
-- [12. Preview Mode](#12-preview-mode)
-- [13. Robot Configuration](#13-robot-configuration)
-- [14. Measurement](#14-measurement)
-- [15. Validation](#15-validation)
-- [16. Save / Autosave / Open](#16-save--autosave--open)
-- [17. Export](#17-export)
-- [18. Navigation JSON Format](#18-navigation-json-format)
-- [19. Keyboard Shortcuts](#19-keyboard-shortcuts)
-- [20. Recommended Workflow](#20-recommended-workflow)
-- [21. Troubleshooting](#21-troubleshooting)
-- [22. Tests](#22-tests)
-- [23. Project Structure](#23-project-structure)
-- [24. Known Limitations](#24-known-limitations)
-
----
-
-# 1. Requirements
-
-แนะนำ:
-
-- Node.js 20 LTS ขึ้นไป
-- npm
-- Browser รุ่นใหม่
-  - Chrome
-  - Edge
-  - Firefox
-
-ตรวจสอบ:
-
-```bash
-node -v
-npm -v
-```
-
----
-
-# 2. Installation
-
-เปิด Terminal ที่ root ของ project:
-
-```bash
-cd AMR-Map-Editor-Light-Theme
-npm install
-npm run dev
-```
-
-เปิด URL ที่ Vite แสดง เช่น:
-
-```text
-http://localhost:5173
-```
-
-Build สำหรับ production:
-
-```bash
-npm run build
-```
-
-Tests:
-
-```bash
-npm test
-```
-
----
-
-# 3. Light Theme และหน้าจอหลัก
-
-UI ปัจจุบันเป็น **Light Theme** สำหรับงานวิศวกรรม โดยใช้:
-
-- Off-white / slate surfaces
-- Light-gray CAD canvas
-- Blue accent สำหรับ active tool / selection
-- Amber สำหรับ warning
-- Red สำหรับ error
-- Compact borders และ dense controls
-
-โครงสร้างหน้าจอ:
-
-```text
-┌──────────────────────────────────────────────────────────────┐
-│                        Top Toolbar                           │
-├──────────────┬─────────────────────────────┬─────────────────┤
-│              │                             │                 │
-│ Left Sidebar │        Map Canvas           │   Properties    │
-│              │                             │   Inspector     │
-│              │                             │                 │
-├──────────────┴─────────────────────────────┴─────────────────┤
-│                    Validation / Status Bar                   │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### Top Toolbar
-
-ประกอบด้วย New, Open, Import, Save, Save As, Undo, Redo, Select, Pan, Brush, Eraser, Path, Zone, Measure, Zoom, Fit Map, Validate, Preview, Export และ Deploy
-
-### Left Sidebar
-
-Tabs:
-
-- Objects
-- Paths
-- Zones
-- Layers
-
-### Right Inspector
-
-ใช้แก้ property ของ entity ที่เลือกแบบ live
-
-### Bottom Panel
-
-แสดง validation issues และ status ของ editor
-
----
-
-# 4. Import Map
-
-รองรับ:
-
-- `.pgm`
-- `.png`
-- `.jpg`
-- `.jpeg`
-- `.yaml`
-- `.yml`
-- `.amrmap`
-- `.json`
-
-## 4.1 ROS YAML + PGM/PNG
-
-เลือกไฟล์พร้อมกัน:
-
-```text
-map.yaml
-map.pgm
-```
-
-ตัวอย่าง YAML:
+The editor supports Open-RMF-oriented export with:
 
 ```yaml
-image: map.pgm
-resolution: 0.05
-origin: [-10.0, -8.0, 0.0]
-negate: 0
-occupied_thresh: 0.65
-free_thresh: 0.196
+coordinate_system: cartesian_meters
 ```
 
-ขั้นตอน:
+Navigation data is converted to RMF vertices and lanes, while Building tools can generate:
 
-1. กด **Import**
-2. เลือก YAML และ image พร้อมกัน
-3. ตรวจ Import Preview
-4. กด **Import Map**
+- `walls`
+- `doors`
+- `floors`
+- `models`
+- `measurements`
 
-ระบบจะโหลด resolution, origin, negate และ occupancy thresholds จาก YAML
+For Traffic Editor alignment, RMF export converts the internal ROS/world-meter coordinates into reference-image coordinates using:
 
-World size:
+- map resolution
+- ROS origin
+- origin yaw
+- image Y-axis conversion
+
+Always keep these files together:
 
 ```text
-World Width  = Image Width  × Resolution
-World Height = Image Height × Resolution
+<name>.building.yaml
+<name>.png
 ```
 
-## 4.2 Drag & Drop
-
-สามารถลาก YAML + PGM/PNG ลงบน Map Canvas ได้โดยตรง
-
-## 4.3 Image-only Import
-
-ถ้าเลือก PNG/JPG/PGM โดยไม่มี YAML ระบบจะถาม:
-
-- Resolution
-- Origin X
-- Origin Y
-- Origin Yaw
-
-Default resolution:
+For workflows that also need robot heading/orientation, use:
 
 ```text
-0.05 m/pixel
+Export → RMF Bundle
 ```
 
-## 4.4 Replace Existing Map
+The bundle contains:
 
-หาก project มี Objects/Paths/Zones อยู่แล้ว โปรแกรมจะเตือนก่อนเปลี่ยน map และให้เลือกเก็บหรือล้าง navigation data
+```text
+<name>.building.yaml
+<name>.png
+<name>-navigation.json
+README.txt
+```
+
+The navigation JSON preserves robot pose information such as `x`, `y`, `yaw`, and `headingDegrees`.
 
 ---
 
-# 5. Coordinate Convention
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Function |
+|---|---|
+| `V` | Select |
+| `H` | Pan |
+| `B` | Brush |
+| `E` | Eraser |
+| `P` | Path |
+| `Z` | Zone |
+| `M` | Measure |
+| `Delete` | Delete selection |
+| `Ctrl/Cmd + C` | Copy |
+| `Ctrl/Cmd + V` | Paste |
+| `Ctrl/Cmd + D` | Duplicate |
+| `Ctrl/Cmd + S` | Save |
+| `Ctrl/Cmd + Z` | Undo |
+| `Ctrl/Cmd + Shift + Z` | Redo |
+| `Esc` | Cancel current operation |
+
+---
+
+## 📚 Detailed Guide
+
+<details>
+<summary><strong>Coordinate Convention</strong></summary>
+
+## 5. Coordinate Convention
 
 ระบบแยก coordinate space ชัดเจน:
 
@@ -325,11 +307,11 @@ X: 12.450 m
 Y: 6.320 m
 ```
 
-## ROS Y-axis
+### ROS Y-axis
 
 Browser canvas มี Y เพิ่มลงล่าง แต่ ROS map ใช้ world convention คนละทิศ ระบบจัดการการกลับแกน Y ใน coordinate utilities ไม่ควรแก้ด้วย `height - y` กระจายใน component
 
-## Yaw
+### Yaw
 
 ภายในใช้ **radian** เพื่อเข้ากับ ROS
 
@@ -342,41 +324,12 @@ Browser canvas มี Y เพิ่มลงล่าง แต่ ROS map ใ�
 
 ---
 
-# 6. การควบคุม Map Canvas
+</details>
 
-## Zoom
+<details>
+<summary><strong>Navigation Objects</strong></summary>
 
-ใช้ Mouse Wheel
-
-- Scroll Up → Zoom In
-- Scroll Down → Zoom Out
-- Zoom จะเกิดรอบ cursor
-
-ช่วงประมาณ:
-
-```text
-5% - 1000%
-```
-
-## Pan
-
-เลือก Pan หรือกด:
-
-```text
-H
-```
-
-แล้วลาก viewport
-
-## Fit Map
-
-กด **Fit Map** เมื่อ map หลุดจาก viewport หรือ zoom มากเกินไป
-
-Pan/Zoom ไม่ถูกบันทึกใน Undo history
-
----
-
-# 7. Navigation Objects
+## 7. Navigation Objects
 
 ไปที่ **Objects** แล้วเลือก:
 
@@ -389,7 +342,7 @@ Pan/Zoom ไม่ถูกบันทึกใน Undo history
 - Waiting Point
 - Parking Point
 
-## วิธีสร้าง
+### วิธีสร้าง
 
 1. เลือกชนิด Object
 2. คลิก `+` หรือรายการนั้น
@@ -412,7 +365,7 @@ Pan/Zoom ไม่ถูกบันทึกใน Undo history
 
 แก้ X/Y ใน Inspector → Object บน map ย้ายตาม
 
-## คำแนะนำในการวาง Waypoint
+### คำแนะนำในการวาง Waypoint
 
 ควรวางที่:
 
@@ -429,7 +382,12 @@ Pan/Zoom ไม่ถูกบันทึกใน Undo history
 
 ---
 
-# 8. Heading / Yaw
+</details>
+
+<details>
+<summary><strong>Heading / Yaw</strong></summary>
+
+## 8. Heading / Yaw
 
 Object ที่มี orientation จะแสดงลูกศร heading
 
@@ -448,7 +406,12 @@ Yaw = 1.5708 rad ≈ 90°
 
 ---
 
-# 9. Paths และ Navigation Graph
+</details>
+
+<details>
+<summary><strong>Paths and Navigation Graph</strong></summary>
+
+## 9. Paths และ Navigation Graph
 
 รองรับ:
 
@@ -458,7 +421,7 @@ Yaw = 1.5708 rad ≈ 90°
 - Bidirectional Path
 - Restricted Path
 
-## วิธีสร้าง Path
+### วิธีสร้าง Path
 
 1. เลือก Path Type
 2. คลิกจุดแรก
@@ -475,7 +438,7 @@ WP-001 ●────────● WP-002
                 ● WP-003
 ```
 
-## Path จำเป็นต้องผ่าน Waypoint ทุกจุดหรือไม่?
+### Path จำเป็นต้องผ่าน Waypoint ทุกจุดหรือไม่?
 
 **ไม่จำเป็น**
 
@@ -498,7 +461,7 @@ WP-001 ●
 
 แต่จุดที่เป็น junction, destination, station หรือ routing decision ควรเป็น node และควรให้ path terminate/connect ที่ node นั้น
 
-### แนะนำ
+#### แนะนำ
 
 ```text
 PATH-001: WP-001 ↔ WP-002
@@ -507,11 +470,11 @@ PATH-002: WP-002 ↔ WP-003
 
 ดีกว่าใช้ path เดียวยาวผ่าน junction ที่ต้องแตกแขนง
 
-## One-way / Two-way Path
+### One-way / Two-way Path
 
 โปรแกรมแสดง direction ของ path ให้ชัดเจนทั้งบน Map Canvas, Properties และ Preview
 
-### One-way
+#### One-way
 
 เลือก **ONE-WAY** ใน Properties หรือใช้ Path Type `one_way`
 
@@ -545,7 +508,7 @@ A → B
 A ← B
 ```
 
-### Two-way / Bidirectional
+#### Two-way / Bidirectional
 
 เลือก **TWO-WAY** ใน Properties หรือใช้ Path Type `bidirectional`
 
@@ -561,7 +524,7 @@ A ● ←────────→ ● B
 TWO-WAY  A ↔ B
 ```
 
-### การสลับทิศจาก Properties
+#### การสลับทิศจาก Properties
 
 เมื่อ Select Path ทางขวาจะมีส่วน **TRAVEL DIRECTION** พร้อมปุ่ม:
 
@@ -575,7 +538,12 @@ TWO-WAY  A ↔ B
 
 ---
 
-# 10. Zones
+</details>
+
+<details>
+<summary><strong>Zones</strong></summary>
+
+## 10. Zones
 
 รองรับ:
 
@@ -588,7 +556,7 @@ TWO-WAY  A ↔ B
 - Human Traffic
 - Safety
 
-## วิธีสร้าง
+### วิธีสร้าง
 
 1. เลือก Zone Type
 2. คลิก polygon vertices
@@ -596,21 +564,26 @@ TWO-WAY  A ↔ B
 4. Double Click หรือ Enter เพื่อ Finish
 5. Esc เพื่อ Cancel
 
-### No-Go
+#### No-Go
 
 ใช้กับเครื่องจักร ชั้นวาง บันได พื้นที่อันตราย หรือพื้นที่ห้าม AMR เข้า
 
-### Slow
+#### Slow
 
 เหมาะกับทางแคบ จุดตัด หน้าประตู หรือพื้นที่คนเดิน สามารถตั้ง Max Speed ได้
 
-### Human Traffic
+#### Human Traffic
 
 ใช้สำหรับพื้นที่ที่คนเดินผ่านบ่อย
 
 ---
 
-# 11. Occupancy Brush Tools
+</details>
+
+<details>
+<summary><strong>Occupancy Brush Tools</strong></summary>
+
+## 11. Occupancy Brush Tools
 
 เลือก **Brush** หรือกด:
 
@@ -620,7 +593,7 @@ B
 
 เมื่อ Brush active จะมี Brush Toolbar บน canvas
 
-## Brush Size
+### Brush Size
 
 เลือกได้:
 
@@ -630,7 +603,7 @@ B
 
 Brush Size มีผลกับ Freehand, Line และ Eraser
 
-## Brush Color
+### Brush Color
 
 เมื่อเลือก **Brush** จะมี Color Picker ใน Brush Toolbar สามารถเลือกสีที่ต้องการได้ก่อนวาด เช่น:
 
@@ -644,7 +617,7 @@ Brush Size มีผลกับ Freehand, Line และ Eraser
 
 > Brush Color เป็น visual color ของ raster ที่แก้ไข แต่ Brush ยังคงมี semantic เป็น **Occupied/Obstacle** สำหรับ Validation และ ROS PGM export เพื่อป้องกันไม่ให้สีที่เลือกทำให้ occupancy classification ผิด
 
-## 11.1 Freehand
+### 11.1 Freehand
 
 ใช้ลากวาด obstacle แบบอิสระ
 
@@ -654,7 +627,7 @@ Brush → Freehand → เลือก Size → Drag
 
 เหมาะกับการเก็บรายละเอียดเล็ก ๆ หรือแก้ obstacle เฉพาะจุด
 
-## 11.2 Line
+### 11.2 Line
 
 สร้าง obstacle เป็นเส้นตรง
 
@@ -670,7 +643,7 @@ Brush → Line → Drag Start → End
 - ปิดช่องทาง
 - วาด barrier
 
-## 11.3 Rectangle
+### 11.3 Rectangle
 
 ลากจากมุมหนึ่งไปอีกมุมหนึ่งเพื่อสร้างพื้นที่สี่เหลี่ยม
 
@@ -684,7 +657,7 @@ Brush → Rectangle → Drag
 - Machine footprint
 - Blocked area
 
-## 11.4 Polygon
+### 11.4 Polygon
 
 ใช้วาดพื้นที่ obstacle รูปร่างอิสระ
 
@@ -697,7 +670,7 @@ Brush → Rectangle → Drag
 
 เหมาะกับเครื่องจักรหรือพื้นที่รูปร่างไม่เป็นสี่เหลี่ยม
 
-## Eraser
+### Eraser
 
 เลือก Eraser หรือกด:
 
@@ -711,7 +684,12 @@ Eraser จะ **restore pixel จาก original imported map** ไม่ใช�
 
 ---
 
-# 12. Preview Mode
+</details>
+
+<details>
+<summary><strong>Preview Mode</strong></summary>
+
+## 12. Preview Mode
 
 กดปุ่มรูป **ตา (Eye)** บน Top Toolbar
 
@@ -733,7 +711,7 @@ Preview ใช้สำหรับตรวจภาพรวมโดยไม
 
 Preview จะจัด Fit Map ให้เหมาะกับพื้นที่แสดงผลโดยอัตโนมัติ
 
-### แนะนำให้ใช้ Preview ก่อน
+#### แนะนำให้ใช้ Preview ก่อน
 
 - Validate
 - Save Revision / Save As
@@ -744,7 +722,12 @@ Preview จะจัด Fit Map ให้เหมาะกับพื้นท
 
 ---
 
-# 13. Robot Configuration
+</details>
+
+<details>
+<summary><strong>Robot Configuration</strong></summary>
+
+## 13. Robot Configuration
 
 สามารถตั้งค่า เช่น:
 
@@ -772,7 +755,12 @@ Max Speed: 1.8 m/s
 
 ---
 
-# 14. Measurement
+</details>
+
+<details>
+<summary><strong>Measurement</strong></summary>
+
+## 14. Measurement
 
 เลือก Measure หรือกด:
 
@@ -791,19 +779,24 @@ M
 
 ---
 
-# 15. Validation
+</details>
+
+<details>
+<summary><strong>Validation</strong></summary>
+
+## 15. Validation
 
 กด **Validate**
 
 ระบบตรวจอย่างน้อย:
 
-### Objects
+#### Objects
 
 - Object outside map
 - Object / Station inside obstacle
 - Duplicate IDs
 
-### Paths
+#### Paths
 
 - Path intersects obstacle
 - Path enters No-Go Zone
@@ -811,14 +804,14 @@ M
 - Disconnected path
 - Zero-length path segment
 
-### Zones
+#### Zones
 
 - Invalid polygon
 - Self-intersection
 - Zone outside map
 - Conflicting zones
 
-### Robot Clearance
+#### Robot Clearance
 
 ตรวจ Robot footprint + Safety Margin กับ obstacle/restricted area
 
@@ -826,9 +819,14 @@ M
 
 ---
 
-# 16. Save / Autosave / Open
+</details>
 
-## Save
+<details>
+<summary><strong>Save / Autosave / Open</strong></summary>
+
+## 16. Save / Autosave / Open
+
+### Save
 
 กด:
 
@@ -840,7 +838,7 @@ Ctrl/Cmd + S
 
 Project ถูกบันทึกลง IndexedDB
 
-## Autosave
+### Autosave
 
 มี debounce autosave หลังแก้ข้อมูลประมาณ 1–2 วินาที
 
@@ -852,7 +850,7 @@ Saving…
 Saved locally
 ```
 
-## Save As
+### Save As
 
 ดาวน์โหลดไฟล์:
 
@@ -862,7 +860,7 @@ project-name.amrmap
 
 เก็บ complete project state สำหรับเปิดกลับมาแก้ต่อ
 
-## Open
+### Open
 
 รองรับ:
 
@@ -875,7 +873,12 @@ Project จะผ่าน schema validation ก่อน load
 
 ---
 
-# 17. Export
+</details>
+
+<details>
+<summary><strong>Export</strong></summary>
+
+## 17. Export
 
 เปิด:
 
@@ -902,7 +905,12 @@ Export
 
 ---
 
-# 18. Navigation JSON Format
+</details>
+
+<details>
+<summary><strong>Navigation JSON Format</strong></summary>
+
+## 18. Navigation JSON Format
 
 Navigation JSON เป็นไฟล์หลักที่แนะนำเมื่อจะส่ง navigation data ไป backend, ROS2 bridge หรือ Fleet Manager
 
@@ -982,7 +990,7 @@ factory-a-floor-1-navigation.json
 }
 ```
 
-### Important
+#### Important
 
 - `waypoints` รวม navigation objects ทุกประเภท เช่น Home, Charging, Docking, Pickup, Drop-off, Waiting, Parking และ Waypoint
 - ใช้ `type` แยกชนิด
@@ -993,270 +1001,16 @@ factory-a-floor-1-navigation.json
 
 ---
 
-# 19. Keyboard Shortcuts
-
-| Shortcut | Function |
-|---|---|
-| `V` | Select |
-| `H` | Pan |
-| `B` | Brush |
-| `E` | Eraser |
-| `P` | Path |
-| `Z` | Zone |
-| `M` | Measure |
-| `Delete` | Delete Selection |
-| `Ctrl/Cmd + C` | Copy |
-| `Ctrl/Cmd + V` | Paste |
-| `Ctrl/Cmd + D` | Duplicate |
-| `Ctrl/Cmd + S` | Save |
-| `Ctrl/Cmd + Z` | Undo |
-| `Ctrl/Cmd + Shift + Z` | Redo |
-| `Esc` | Cancel Current Tool |
+</details>
 
 ---
 
-# 20. Recommended Workflow
+## 🧩 Advanced Features
 
-```text
-Import YAML + PGM
-        ↓
-Fit Map
-        ↓
-ตรวจ Resolution / Origin
-        ↓
-Clean Occupancy Map
-(Freehand / Line / Rectangle / Polygon)
-        ↓
-สร้าง HOME / CHARGE / DOCK
-        ↓
-สร้าง Pickup / Drop-off
-        ↓
-วาง Waypoints ตาม Junction / Turn
-        ↓
-สร้าง Navigation Paths
-        ↓
-สร้าง Zones
-        ↓
-ตั้ง Robot Configuration
-        ↓
-Preview
-        ↓
-Validate
-        ↓
-แก้ Errors / Warnings
-        ↓
-Save / Save As
-        ↓
-Export Navigation JSON / ROS Map
-```
+<details>
+<summary><strong>Delete a Single Path Vertex</strong></summary>
 
----
-
-# 21. Troubleshooting
-
-## 21.1 Import สำเร็จแต่ Map ไม่ขึ้น
-
-ลองตามลำดับ:
-
-1. กด **Fit Map**
-2. เปิด **Layers** และตรวจ `Occupancy Map` ว่า visible
-3. ถ้าใช้ ROS YAML ให้เลือก YAML + image พร้อมกัน
-4. ตรวจชื่อ image ใน YAML:
-
-```yaml
-image: map.pgm
-```
-
-ต้องตรงกับไฟล์จริง
-
-5. กด `F12 → Console` เพื่อดู error
-
-## 21.2 React-Konva error
-
-หากพบ:
-
-```text
-Text components are not supported for now in ReactKonva.
-Your text is: " "
-```
-
-หรือ:
-
-```text
-TypeError: can't access property "getParent", child is undefined
-```
-
-หมายถึงมี plain text node อยู่ภายใน Konva `Layer/Group`
-
-เวอร์ชันปัจจุบันได้แก้จุดที่เคยพบแล้ว
-
-หลังอัปเดต source ให้ restart:
-
-```bash
-Ctrl + C
-npm run dev
-```
-
-แล้ว Hard Refresh:
-
-```text
-Ctrl + Shift + R
-```
-
-## 21.3 YAML หา image ไม่พบ
-
-ถ้า YAML มี:
-
-```yaml
-image: warehouse_map.pgm
-```
-
-ต้องเลือก `warehouse_map.pgm` มาพร้อม YAML ในครั้งเดียว
-
-## 21.4 Preview ไม่มีบาง layer
-
-ตรวจ Layers ใน editor ก่อน และตรวจว่า entity ถูก `enabled`
-
-## 21.5 Path validation ขึ้น disconnected
-
-ตรวจว่าปลาย path อยู่ที่ node ที่ต้องการเชื่อมจริง และ junction สำคัญควรถูกแบ่งเป็น path segments
-
-## 21.6 Export ROS ไม่ได้
-
-ต้องมี:
-
-- Valid occupancy map
-- Width / Height ที่ถูกต้อง
-- Resolution > 0
-
----
-
-# 22. Tests
-
-Unit tests ครอบคลุม logic เช่น:
-
-- `pixelToWorld`
-- `worldToPixel`
-- PGM P2 / P5 parsing
-- YAML parsing
-- Project schema validation
-- Project migration
-- Waypoint export
-- Navigation export
-- ROS YAML generation
-- Polygon validation
-
-รัน:
-
-```bash
-npm test
-```
-
-Build:
-
-```bash
-npm run build
-```
-
----
-
-# 23. Project Structure
-
-```text
-src/
-  components/
-    editor/
-    toolbar/
-    sidebar/
-    inspector/
-    validation/
-    dialogs/
-
-  map-engine/
-    coordinates.ts
-    viewport.ts
-
-  geometry/
-    polygon.ts
-    collision.ts
-    distance.ts
-
-  validation/
-    validator.ts
-
-  state/
-    editorStore.ts
-    projectStore.ts
-
-  services/
-    import/
-      mapImporter.ts
-      pgmParser.ts
-      yamlMapParser.ts
-      projectImporter.ts
-
-    export/
-      projectExporter.ts
-      rosExporter.ts
-      navigationExporters.ts
-
-    persistence/
-      indexedDb.ts
-
-    mapEditing/
-      occupancyEditor.ts
-
-  schemas/
-    projectSchema.ts
-
-  utils/
-    files.ts
-```
-
-Architecture แยก UI / map engine / geometry / validation / persistence / import-export เพื่อรองรับ ROS2, REST API, WebSocket และ Fleet Manager ในอนาคต
-
----
-
-# 24. Known Limitations
-
-ฟังก์ชัน Deploy ยังไม่ได้เชื่อมกับ robot/fleet backend จริง และจะไม่แสดง fake success
-
-สิ่งที่ยังสามารถพัฒนาต่อ:
-
-- Free-space / Unknown occupancy brush modes
-- Fill tool
-- Advanced multi-selection / box selection
-- Insert/Delete individual path vertex ผ่าน dedicated commands
-- Insert/Delete individual zone vertex ผ่าน dedicated commands
-- Whole-zone drag refinement
-- Revision history / compare revisions
-- Recent Projects management UI
-- Real deployment API
-- ROS2 integration
-- Fleet Manager integration
-- Authentication / authorization
-- Browser-level integration/E2E tests เพิ่มเติม
-
----
-
-## Production Safety Note
-
-AMR Map Editor อยู่ในสถานะ Engineering Tool / Development Project
-
-ก่อนนำข้อมูลไปใช้กับ AMR จริงใน production ควรตรวจสอบอย่างน้อย:
-
-- Map resolution / origin / ROS frame
-- Robot footprint
-- Safety margin / clearance
-- Navigation graph connectivity
-- One-way direction
-- No-Go / Slow / Human Traffic zones
-- Charging / Docking pose และ yaw
-- Validation errors ทั้งหมด
-- ทดสอบใน staging/test environment ก่อน deploy ไป production
-
-
-## Delete a Single Path Point / Vertex
+### Delete a Single Path Point / Vertex
 
 Path vertices can now be removed individually without deleting the entire path.
 
@@ -1274,13 +1028,16 @@ The Properties panel also allows editing the selected vertex X/Y world coordinat
 
 > A valid path must contain at least 2 points. When only 2 points remain, **Delete Point** is disabled. Deleting the whole path remains available through the normal Path Delete button.
 
+</details>
 
+<details>
+<summary><strong>Path Connectivity / Junctions</strong></summary>
 
-## Path Connectivity / Junctions (v0.8.0)
+### Path Connectivity / Junctions (v0.8.0)
 
 ในเวอร์ชัน 0.8.0 การที่ Path สองเส้นดูเหมือนแตะหรือตัดกันบนหน้าจอ **ไม่ถือว่าเชื่อมกันโดยอัตโนมัติ** ระบบใช้ topology connection ที่เกิดจากพิกัด vertex ที่ตรงกันจริง
 
-### สัญลักษณ์ CONNECTED
+#### สัญลักษณ์ CONNECTED
 
 เมื่อ Path endpoint เชื่อมกับ Waypoint / Station / Path อื่นจริง จะเห็น **จุด Junction สีเขียว** พร้อมคำว่า `CONNECTED` บน Map
 
@@ -1292,7 +1049,7 @@ PATH-A ─────●───── PATH-B
 
 จุดสีเขียวหมายถึง Path share coordinate/vertex เดียวกันจริง ไม่ใช่แค่เส้นวาดทับกัน
 
-### Auto Snap
+#### Auto Snap
 
 เมื่อสร้าง Path ใหม่ หรือ drag จุด Start / End ของ Path เข้าใกล้:
 
@@ -1321,7 +1078,7 @@ PATH-A ───────●─────
               │ PATH-B
 ```
 
-### Path Connectivity panel
+#### Path Connectivity panel
 
 เลือก Path แล้วดูที่ Properties → **PATH CONNECTIVITY**
 
@@ -1339,7 +1096,7 @@ END     Connected / Open
 - `Connect Both`
 - `Merge with <path>` เมื่อมี Path ที่ compatible อยู่ใกล้
 
-### Connect vs Merge
+#### Connect vs Merge
 
 **Connect** เหมาะกับกรณีส่วนใหญ่ เพราะ Path ยังเป็นคนละเส้นและสามารถมี speed/type/direction ต่างกันได้
 
@@ -1361,7 +1118,7 @@ One-way + Bidirectional
 
 ควรใช้ **Connect** แทน Merge เพื่อรักษา routing rule ของแต่ละ Path
 
-### Validation เพิ่มเติม
+#### Validation เพิ่มเติม
 
 Validate Map จะเตือนกรณี:
 
@@ -1371,7 +1128,12 @@ Path A crosses Path B visually but no topology junction exists.
 
 หมายความว่าเส้นตัดกันบนภาพ แต่ไม่ได้ share vertex จริง ให้ใช้ Connect หรือแก้ vertex ให้ตรงกันจนเห็นจุด `CONNECTED` สีเขียว
 
-## Custom Export File Name (v0.8.1)
+</details>
+
+<details>
+<summary><strong>Custom Export File Name</strong></summary>
+
+### Custom Export File Name (v0.8.1)
 
 ก่อนดาวน์โหลดไฟล์จาก **Export Map** สามารถกำหนดชื่อไฟล์หลักได้ที่ช่อง **File name**
 
@@ -1403,8 +1165,12 @@ WB220126_Floor3-paths-selected.json
 
 ชื่อภาษาไทยสามารถใช้ได้ และระบบจะลบ/แทนที่อักขระที่ไม่เหมาะกับชื่อไฟล์ เช่น `/ \\ : * ? \" < > |` โดยอัตโนมัติ
 
+</details>
 
-## RMF Traffic Editor `.building.yaml` Export (v0.9.0)
+<details>
+<summary><strong>RMF Traffic Editor Export</strong></summary>
+
+### RMF Traffic Editor `.building.yaml` Export (v0.9.0)
 
 เมนู **Export → RMF Building (.building.yaml)** จะสร้างไฟล์ เช่น:
 
@@ -1445,11 +1211,16 @@ drawing:
 
 ---
 
-# RMF Building Geometry (v0.10.0)
+</details>
+
+<details>
+<summary><strong>RMF Building Geometry</strong></summary>
+
+## RMF Building Geometry (v0.10.0)
 
 เวอร์ชันนี้เพิ่ม Building tab สำหรับสร้างข้อมูลที่ใช้ใน Open-RMF `.building.yaml` โดยตรง ได้แก่ **Wall, Door, Floor Area, Model และ Measurement** นอกเหนือจาก Navigation Objects และ Paths เดิม
 
-## Wall
+### Wall
 
 เลือก `Building → Wall` แล้วคลิก 2 จุดบนแผนที่ จากนั้นเลือก Wall เพื่อแก้ Properties:
 
@@ -1466,7 +1237,7 @@ drawing:
 
 Exporter จะสร้างรายการ `walls` ที่อ้างอิง vertex indices และ parameters เช่น `alpha`, `texture_height`, `texture_name`, `texture_scale`, `texture_width`.
 
-## Door
+### Door
 
 เลือก `Building → Door` แล้วคลิก 2 จุด สามารถกำหนด:
 
@@ -1480,7 +1251,7 @@ Exporter จะสร้างรายการ `walls` ที่อ้าง�
 
 ข้อมูลถูก export ไปยัง `doors` ใน `.building.yaml`.
 
-## Floor Area
+### Floor Area
 
 เลือก `Building → Floor Area` คลิกอย่างน้อย 3 vertices แล้วกด Enter หรือ Double Click เพื่อปิด polygon
 
@@ -1493,15 +1264,15 @@ Properties:
 - Ceiling Scale
 - Indoor
 
-## Model
+### Model
 
 เลือก `Building → Model` แล้วคลิกตำแหน่งที่ต้องการวาง สามารถกำหนด `model_name`, name, X/Y, Yaw, Z, Static และ Dispensable.
 
-## Measurement
+### Measurement
 
 เลือก `Building → Measurement` แล้วคลิก 2 จุด ระบบคำนวณระยะจริงเป็นเมตรอัตโนมัติ และสามารถแก้ Distance ได้ใน Properties ก่อน export.
 
-## Building / Level Properties
+### Building / Level Properties
 
 ใน Properties มีส่วน **RMF BUILDING / LEVEL** สำหรับกำหนด:
 
@@ -1510,7 +1281,7 @@ Properties:
 - Reference Level
 - Elevation (m)
 
-## `.building.yaml` ที่ Export
+### `.building.yaml` ที่ Export
 
 ไฟล์ที่ได้มีโครงสร้างหลัก:
 
@@ -1537,8 +1308,7 @@ Navigation Objects จะถูกแปลงเป็น named vertices แล
 
 > ปัจจุบัน editor เป็น single-level workflow และ `lifts` ยัง export เป็น `{}`. การทำ multi-level + lift editor ควรเป็น phase ถัดไป เพราะ lift ต้องผูกหลาย level และ door pairs เข้าด้วยกัน.
 
-
-## Wall Length / Angle Editing
+### Wall Length / Angle Editing
 
 หลังวาด Wall 2 จุดแล้ว ให้เลือก Wall และเปิด **WALL PROPERTIES → WALL GEOMETRY** สามารถแก้ `Length (m)` และ `Angle (°)` ได้โดยตรง ถ้าวาดสั้นเกินไปไม่ต้องลบและวาดใหม่
 
@@ -1550,12 +1320,11 @@ Navigation Objects จะถูกแปลงเป็น named vertices แล
 
 ค่าจะ sync สองทาง: การแก้ Start/End X,Y จะทำให้ Length/Angle คำนวณใหม่ และการแก้ Length/Angle จะอัปเดต Start/End geometry บน Map ทันที พร้อมรองรับ Undo/Redo ผ่าน history ของ Project Store.
 
-
-## Wall Endpoint Dragging (v0.10.2)
+### Wall Endpoint Dragging (v0.10.2)
 
 Wall สามารถแก้ geometry ได้ทั้งจาก Properties และจาก Mouse บน Map Canvas
 
-### ลากปลาย Wall ด้วย Mouse
+#### ลากปลาย Wall ด้วย Mouse
 
 1. เลือก **Select Tool (`V`)**
 2. คลิก Wall ที่ต้องการแก้
@@ -1578,23 +1347,31 @@ START ○────────────────○ END
 - ใช้ `Ctrl/Cmd + Z` เพื่อ Undo ได้
 - หาก Building Layer ถูก Lock จะไม่สามารถลาก Handle ได้
 
-### Precision + Mouse Workflow
+#### Precision + Mouse Workflow
 
 แนะนำให้ใช้สองวิธีร่วมกัน:
 
 - **Mouse Drag** สำหรับปรับตำแหน่งอย่างรวดเร็ว
 - **Length / Angle / Coordinates** ใน Properties สำหรับปรับค่าที่ต้องการความแม่นยำ
 
+</details>
 
-## Interaction & Snap Architecture (v0.10.8)
+<details>
+<summary><strong>Interaction & Snap Architecture</strong></summary>
+
+### Interaction & Snap Architecture (v0.10.8)
 
 - Pointer interaction policy ถูกแยกไว้ที่ `src/map-engine/interactionPolicy.ts` เพื่อป้องกัน Floor/Zone/Path ดัก click ตอนกำลังวาดหรือวาง Navigation Object
 - Snapping ถูกรวมไว้ที่ `src/geometry/snapEngine.ts` รองรับ Object, Path vertex/segment, Wall endpoint/segment
 - `Building → Door` สามารถ snap เข้ากับ Wall และพยายามรักษา Door สองจุดให้อยู่บน Wall เดียวกันโดยอัตโนมัติ
 - มี `DOOR SNAP` highlight ก่อนคลิก เพื่อให้เห็นตำแหน่งที่จะยึดจริง
 
+</details>
 
-## RMF Traffic Editor Coordinate Compatibility (v0.10.9)
+<details>
+<summary><strong>RMF Coordinate Compatibility</strong></summary>
+
+### RMF Traffic Editor Coordinate Compatibility (v0.10.9)
 
 RMF `.building.yaml` export uses `reference_image` coordinates so the geometry aligns with the
 exported occupancy PNG in Traffic Editor.
@@ -1620,8 +1397,12 @@ Always export and keep these files together:
 
 Do not rename only one of the two files because the building YAML references the PNG by filename.
 
+</details>
 
-## RMF Bundle + Robot Heading (v0.11.0)
+<details>
+<summary><strong>RMF Bundle + Robot Heading</strong></summary>
+
+### RMF Bundle + Robot Heading (v0.11.0)
 
 Traffic Editor ไม่ได้ render custom vertex property `amr_yaw` เป็นลูกศร heading ของ Waypoint/Station โดยตรง
 
@@ -1657,3 +1438,279 @@ README.txt
 ```
 
 ดังนั้นการไม่เห็น heading arrow ใน Traffic Editor ไม่ได้หมายความว่า orientation หาย ข้อมูล orientation ยังคงถูกเก็บไว้สำหรับ robot integration
+
+</details>
+
+---
+
+## 🛠 Requirements
+
+- Node.js 20 LTS or newer
+- npm
+- Modern browser
+  - Chrome
+  - Edge
+  - Firefox
+
+Check versions:
+
+```bash
+node -v
+npm -v
+```
+
+---
+
+## 🧪 Development
+
+### Run development server
+
+```bash
+npm run dev
+```
+
+### Production build
+
+```bash
+npm run build
+```
+
+### Tests
+
+```bash
+npm test
+```
+
+---
+
+## 📁 Project Structure
+
+```text
+src/
+├── components/
+│   ├── editor/
+│   ├── toolbar/
+│   ├── sidebar/
+│   ├── inspector/
+│   ├── validation/
+│   └── dialogs/
+│
+├── map-engine/
+│   ├── coordinates.ts
+│   ├── viewport.ts
+│   └── interactionPolicy.ts
+│
+├── geometry/
+│   ├── polygon.ts
+│   ├── collision.ts
+│   ├── distance.ts
+│   └── snapEngine.ts
+│
+├── validation/
+│   └── validator.ts
+│
+├── state/
+│   ├── editorStore.ts
+│   └── projectStore.ts
+│
+├── services/
+│   ├── import/
+│   ├── export/
+│   ├── persistence/
+│   └── mapEditing/
+│
+├── schemas/
+│   └── projectSchema.ts
+│
+└── utils/
+    └── files.ts
+```
+
+The architecture separates UI, map engine, geometry, validation, state, persistence, and import/export logic so the project can be extended toward ROS2, Fleet Manager, REST API, or WebSocket integration.
+
+---
+
+## 🧯 Troubleshooting
+
+<details>
+<summary><strong>Open troubleshooting guide</strong></summary>
+
+## 21. Troubleshooting
+
+### 21.1 Import สำเร็จแต่ Map ไม่ขึ้น
+
+ลองตามลำดับ:
+
+1. กด **Fit Map**
+2. เปิด **Layers** และตรวจ `Occupancy Map` ว่า visible
+3. ถ้าใช้ ROS YAML ให้เลือก YAML + image พร้อมกัน
+4. ตรวจชื่อ image ใน YAML:
+
+```yaml
+image: map.pgm
+```
+
+ต้องตรงกับไฟล์จริง
+
+5. กด `F12 → Console` เพื่อดู error
+
+### 21.2 React-Konva error
+
+หากพบ:
+
+```text
+Text components are not supported for now in ReactKonva.
+Your text is: " "
+```
+
+หรือ:
+
+```text
+TypeError: can't access property "getParent", child is undefined
+```
+
+หมายถึงมี plain text node อยู่ภายใน Konva `Layer/Group`
+
+เวอร์ชันปัจจุบันได้แก้จุดที่เคยพบแล้ว
+
+หลังอัปเดต source ให้ restart:
+
+```bash
+Ctrl + C
+npm run dev
+```
+
+แล้ว Hard Refresh:
+
+```text
+Ctrl + Shift + R
+```
+
+### 21.3 YAML หา image ไม่พบ
+
+ถ้า YAML มี:
+
+```yaml
+image: warehouse_map.pgm
+```
+
+ต้องเลือก `warehouse_map.pgm` มาพร้อม YAML ในครั้งเดียว
+
+### 21.4 Preview ไม่มีบาง layer
+
+ตรวจ Layers ใน editor ก่อน และตรวจว่า entity ถูก `enabled`
+
+### 21.5 Path validation ขึ้น disconnected
+
+ตรวจว่าปลาย path อยู่ที่ node ที่ต้องการเชื่อมจริง และ junction สำคัญควรถูกแบ่งเป็น path segments
+
+### 21.6 Export ROS ไม่ได้
+
+ต้องมี:
+
+- Valid occupancy map
+- Width / Height ที่ถูกต้อง
+- Resolution > 0
+
+---
+
+</details>
+
+---
+
+## ⚠️ Known Limitations
+
+- Deploy is not connected to a real robot or fleet backend yet
+- Current editor workflow is single-level
+- `lifts` currently export as `{}`
+- Multi-level + lift editing is not implemented yet
+- Real deployment API is not connected
+- Authentication / authorization is not implemented
+- Browser-level E2E test coverage can be expanded
+
+Possible future improvements:
+
+- Free-space / Unknown occupancy brush modes
+- Fill tool
+- Advanced box / multi-selection
+- Revision history and revision comparison
+- Recent Projects management
+- ROS2 integration
+- Fleet Manager integration
+- Real deployment API
+- Multi-level RMF building editing
+
+---
+
+## 🛡 Production Safety
+
+AMR Map Editor is currently an **Engineering Tool / Development Project**.
+
+Before using exported data with a real AMR, verify:
+
+- Map resolution and origin
+- ROS frame convention
+- Robot footprint
+- Safety margin and clearance
+- Navigation graph connectivity
+- One-way path direction
+- No-Go / Slow / Human Traffic zones
+- Charging and Docking pose / yaw
+- All validation errors and warnings
+
+Always test exported maps in a staging or test environment before production deployment.
+
+---
+
+## 🧪 Test Coverage
+
+Unit tests cover logic including:
+
+- `pixelToWorld`
+- `worldToPixel`
+- PGM P2 / P5 parsing
+- YAML parsing
+- Project schema validation
+- Project migration
+- Waypoint export
+- Navigation export
+- ROS YAML generation
+- Polygon validation
+
+Run:
+
+```bash
+npm test
+```
+
+---
+
+## 🗺 Roadmap
+
+- [x] ROS map import
+- [x] Occupancy map editing
+- [x] Navigation objects
+- [x] Path editor
+- [x] Zones
+- [x] Robot configuration
+- [x] Validation
+- [x] Navigation JSON export
+- [x] RMF `.building.yaml` export
+- [x] RMF Building geometry
+- [x] Path / wall / door snapping
+- [x] RMF Bundle export
+- [ ] Multi-level RMF support
+- [ ] Lift editor
+- [ ] ROS2 runtime integration
+- [ ] Fleet Manager integration
+- [ ] Deployment API
+- [ ] Authentication / authorization
+- [ ] Expanded E2E tests
+
+---
+
+## 📌 Version
+
+```text
+AMR Map Editor v0.11.0
+```
