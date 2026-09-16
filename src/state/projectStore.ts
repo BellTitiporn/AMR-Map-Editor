@@ -38,9 +38,49 @@ export const useProjectStore=create<ProjectState>((set,get)=>({projectId:initial
  addModel:v=>set(s=>({building:{...s.building,models:[...s.building.models,v]},dirty:true,saveState:'unsaved'})),updateModel:(id,p)=>set(s=>({building:{...s.building,models:s.building.models.map(x=>x.id===id?{...x,...p}:x)},dirty:true,saveState:'unsaved'})),
  addMeasurement:v=>set(s=>({building:{...s.building,measurements:[...s.building.measurements,v]},dirty:true,saveState:'unsaved'})),updateMeasurement:(id,p)=>set(s=>({building:{...s.building,measurements:s.building.measurements.map(x=>x.id===id?{...x,...p}:x)},dirty:true,saveState:'unsaved'})),
  validate:()=>{const s=get(),issues=validateProject(s);set({issues});return issues},
- toProjectFile:()=>{const s=get();return{format:'AMR_MAP_PROJECT',version:'1.0',project:{id:s.projectId,name:s.name,metadata:clone(s.metadata),image:clone(s.image),objects:clone(s.objects),paths:clone(s.paths),zones:clone(s.zones),robotConfigs:[clone(s.robot)],building:clone(s.building),createdAt:s.createdAt,updatedAt:new Date().toISOString(),revision:s.revision}}},
+ toProjectFile:()=>{const s=get();return{
+   format:'AMR_MAP_PROJECT',
+   version:'1.0',
+   project:{
+     id:s.projectId,
+     name:s.name,
+     metadata:clone(s.metadata),
+     image:clone(s.image),
+     objects:clone(s.objects),
+     paths:s.paths.map(path=>({
+       ...clone(path),
+       orientation:path.orientation??''
+     })),
+     zones:clone(s.zones),
+     robotConfigs:[clone(s.robot)],
+     building:clone(s.building),
+     createdAt:s.createdAt,
+     updatedAt:new Date().toISOString(),
+     revision:s.revision
+   }
+ }},
  saveLocal:async()=>{set({saveState:'saving'});try{await saveProjectIndexedDb(get().toProjectFile());set({dirty:false,saveState:'saved'})}catch(e){set({saveState:'error'});throw e}},
- loadProject:f=>set({projectId:f.project.id,name:f.project.name,createdAt:f.project.createdAt,revision:f.project.revision,metadata:clone(f.project.metadata),image:clone(f.project.image),objects:clone(f.project.objects),paths:clone(f.project.paths),zones:clone(f.project.zones),robot:clone(f.project.robotConfigs[0]),building:clone(f.project.building??defaultBuildingData(f.project.name)),issues:[],dirty:false,saveState:'saved',undo:[],redo:[]}),
+ loadProject:f=>set({
+   projectId:f.project.id,
+   name:f.project.name,
+   createdAt:f.project.createdAt,
+   revision:f.project.revision,
+   metadata:clone(f.project.metadata),
+   image:clone(f.project.image),
+   objects:clone(f.project.objects),
+   paths:f.project.paths.map(path=>({
+     ...clone(path),
+     orientation:path.orientation??''
+   })),
+   zones:clone(f.project.zones),
+   robot:clone(f.project.robotConfigs[0]),
+   building:clone(f.project.building??defaultBuildingData(f.project.name)),
+   issues:[],
+   dirty:false,
+   saveState:'saved',
+   undo:[],
+   redo:[]
+ }),
  replaceMap:(metadata,image,clear)=>set(s=>({metadata,image,name:metadata.name,objects:clear?[]:s.objects,paths:clear?[]:s.paths,zones:clear?[]:s.zones,building:clear?defaultBuildingData(metadata.name):{...s.building,config:{...s.building.config,buildingName:metadata.name}},issues:[],dirty:true,saveState:'unsaved',undo:[],redo:[]})),updateMapImage:image=>set({image,dirty:true,saveState:'unsaved'}),
  newProject:()=>{const id=crypto.randomUUID(),now=new Date().toISOString();set({projectId:id,name:'Untitled Map',createdAt:now,revision:1,metadata:{id,name:'Untitled Map',width:850,height:620,resolution:.05,originX:0,originY:0,originYaw:0},image:null,objects:[],paths:[],zones:[],robot:clone(seedRobot),building:defaultBuildingData('Untitled Map'),issues:[],dirty:false,saveState:'saved',undo:[],redo:[]})}
 }));

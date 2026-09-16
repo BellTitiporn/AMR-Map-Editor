@@ -3,7 +3,19 @@ const point=z.object({x:z.number().finite(),y:z.number().finite()});
 const metadata=z.object({id:z.string(),name:z.string(),width:z.number().int().positive(),height:z.number().int().positive(),resolution:z.number().positive(),originX:z.number().finite(),originY:z.number().finite(),originYaw:z.number().finite()});
 const image=z.object({dataUrl:z.string(),originalDataUrl:z.string().optional(),mimeType:z.string(),originalFilename:z.string(),sourceFormat:z.enum(['pgm','png','jpg','jpeg']),originalBase64:z.string().optional(),occupancyBase64:z.string().optional(),negate:z.union([z.literal(0),z.literal(1)]),occupiedThresh:z.number(),freeThresh:z.number()}).nullable();
 const object=z.object({id:z.string(),name:z.string(),type:z.enum(['waypoint','home','charging_station','docking_station','pickup','dropoff','waiting','parking']),x:z.number(),y:z.number(),yaw:z.number(),description:z.string().optional(),enabled:z.boolean(),metadata:z.record(z.string(),z.unknown())});
-const path=z.object({id:z.string(),name:z.string(),type:z.enum(['normal','preferred','one_way','bidirectional','restricted']),points:z.array(point).min(2),maxSpeed:z.number().optional(),width:z.number().optional(),safetyClearance:z.number().optional(),priority:z.number().optional(),robotTypes:z.array(z.string()).optional(),enabled:z.boolean()});
+const path=z.object({
+  id:z.string(),
+  name:z.string(),
+  type:z.enum(['normal','preferred','one_way','bidirectional','restricted']),
+  points:z.array(point).min(2),
+  maxSpeed:z.number().optional(),
+  width:z.number().optional(),
+  safetyClearance:z.number().optional(),
+  priority:z.number().optional(),
+  robotTypes:z.array(z.string()).optional(),
+  orientation:z.enum(['','forward','backward']).default(''),
+  enabled:z.boolean()
+});
 const zone=z.object({id:z.string(),name:z.string(),type:z.enum(['no_go','slow','restricted','parking','loading','unloading','human_traffic','safety']),polygon:z.array(point).min(3),maxSpeed:z.number().optional(),robotTypes:z.array(z.string()).optional(),enabled:z.boolean(),metadata:z.record(z.string(),z.unknown())});
 const robot=z.object({name:z.string(),width:z.number().positive(),length:z.number().positive(),footprint:z.union([z.object({type:z.literal('rectangle'),width:z.number().positive(),length:z.number().positive()}),z.object({type:z.literal('circle'),radius:z.number().positive()}),z.object({type:z.literal('polygon'),points:z.array(point).min(3)})]),safetyMargin:z.number().nonnegative(),inflationRadius:z.number().nonnegative(),minimumClearance:z.number().nonnegative(),minimumTurningRadius:z.number().nonnegative(),maxSpeed:z.number().positive()});
 const wall=z.object({id:z.string(),name:z.string(),start:point,end:point,enabled:z.boolean(),alpha:z.number().min(0).max(1),textureName:z.string(),textureScale:z.number().positive(),textureWidth:z.number().positive(),textureHeight:z.number().positive()});
