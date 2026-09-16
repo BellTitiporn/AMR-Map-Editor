@@ -494,6 +494,8 @@ function BuildingConfig() {
       )
     : [];
 
+  const hasFourCorners = sourcePoints.length >= 4;
+
   return <div className="robotcfg">
     <div className="group-title">RMF BUILDING / LEVEL</div>
 
@@ -532,8 +534,8 @@ function BuildingConfig() {
       <div className="path-direction-head">
         <div>
           <span className="group-title">AUTO REFERENCE COORDINATES</span>
-          <b className={`path-direction-status ${sourceFloor ? 'twoway' : 'neutral'}`}>
-            {sourceFloor ? 'READY' : 'NO FLOOR'}
+          <b className={`path-direction-status ${sourceFloor && hasFourCorners ? 'twoway' : 'neutral'}`}>
+            {sourceFloor && hasFourCorners ? 'READY • 4 CORNERS' : sourceFloor ? 'NEED 4 POINTS' : 'NO FLOOR'}
           </b>
         </div>
       </div>
@@ -544,15 +546,18 @@ function BuildingConfig() {
           <b>{sourceFloor.name || sourceFloor.id}</b>
         </div>
         <div className="kv">
-          <span>Reference Vertices</span>
+          <span>Source Polygon Vertices</span>
           <b>{sourcePoints.length}</b>
+        </div>
+        <div className="kv">
+          <span>Exported Reference Points</span>
+          <b>{hasFourCorners ? 4 : 0}</b>
         </div>
 
         <div className="path-direction-help">
-          Reference coordinates are generated automatically from the same Floor
-          polygon vertices used by GeoJSON. Each point is converted with the
-          same world → reference_image transform used by building.yaml, so
-          robot[i] and rmf[i] always represent the same physical position.
+          Only the four principal outer corners are exported:
+          top-left, top-right, bottom-right, bottom-left.
+          RMF and robot arrays use the same physical four corners in the same order.
         </div>
       </> : <div className="path-direction-help">
         Create and enable a Floor polygon with at least 3 vertices. The largest

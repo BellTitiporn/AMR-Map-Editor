@@ -35,15 +35,6 @@ function uniquePolygonPoints(points: Point2D[]): Point2D[] {
     }
   }
 
-  // GeoJSON polygons commonly repeat the first point as the last point.
-  // The reference-coordinate arrays must contain each physical vertex once.
-  if (
-    result.length > 1 &&
-    samePoint(result[0], result[result.length - 1])
-  ) {
-    result.pop();
-  }
-
   return result;
 }
 
@@ -58,6 +49,96 @@ function polygonArea(points: Point2D[]): number {
   }
 
   return Math.abs(sum) / 2;
+}
+
+/**
+ * Pick exactly four principal corners from a Floor polygon.
+ *
+ * World/robot coordinates use +Y upward:
+ *   TL = min(x - y)
+ *   TR = max(x + y)
+ *   BR = max(x - y)
+ *   BL = min(x + y)
+ *
+ * This keeps only the outer four map corners even when the Floor polygon
+ * contains many intermediate wall/shape vertices.
+ *
+ * Output order:
+ *   0 = top-left
+ *   1 = top-right
+ *   2 = bottom-right
+ *   3 = bottom-left
+ */
+export function selectFourPrincipalCorners(
+  points: Point2D[],
+): Point2D[] {
+  const unique = uniquePolygonPoints(points);
+
+  if (unique.length < 4) {
+    throw new Error(
+      'Reference Floor must contain at least 4 unique vertices to generate four map corners.',
+    );
+  }
+
+  const candidates = [
+    {
+      name: 'top-left',
+      score: (p: Point2D) => p.x - p.y,
+      mode: 'min' as const,
+    },
+    {
+      name: 'top-right',
+      score: (p: Point2D) => p.x + p.y,
+      mode: 'max' as const,
+    },
+    {
+      name: 'bottom-right',
+      score: (p: Point2D) => p.x - p.y,
+      mode: 'max' as const,
+    },
+    {
+      name: 'bottom-left',
+      score: (p: Point2D) => p.x + p.y,
+      mode: 'min' as const,
+    },
+  ];
+
+  const selected: Point2D[] = [];
+  const used = new Set<number>();
+
+  for (const candidate of candidates) {
+    let bestIndex = -1;
+    let bestScore =
+      candidate.mode === 'min'
+        ? Number.POSITIVE_INFINITY
+        : Number.NEGATIVE_INFINITY;
+
+    for (let i = 0; i < unique.length; i += 1) {
+      if (used.has(i)) continue;
+
+      const value = candidate.score(unique[i]);
+      const better =
+        candidate.mode === 'min'
+          ? value < bestScore
+          : value > bestScore;
+
+      if (better) {
+        bestScore = value;
+        bestIndex = i;
+      }
+    }
+
+    if (bestIndex < 0) {
+      throw new Error(
+        `Unable to resolve ${candidate.name} reference corner.`,
+      );
+    }
+
+    used.add(bestIndex);
+    selected.push(unique[bestIndex]);
+  }
+
+  return selected;
 }
 
 /**
@@ -105,13 +186,11 @@ export function generateReferenceCoordinates(
   building: BuildingData,
 ): GeneratedReferenceCoordinates {
   const floor = selectReferenceFloor(building);
-  const robot = uniquePolygonPoints(floor.polygon);
 
-  if (robot.length < 3) {
-    throw new Error(
-      'Reference Floor must contain at least 3 unique vertices.',
-    );
-  }
+  // Keep exactly four principal outer corners only.
+  const robot = selectFourPrincipalCorners(
+    floor.polygon,
+  );
 
   const rmf = robot.map(point =>
     worldToReferenceImage(point, metadata),
