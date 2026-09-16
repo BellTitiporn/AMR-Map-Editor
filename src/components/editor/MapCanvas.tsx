@@ -226,7 +226,13 @@ export function MapCanvas() {
       p.commit();
       const prefix=e.placementObject==='waypoint'?'WP':e.placementObject.toUpperCase();
       const id=`${prefix}-${crypto.randomUUID().slice(0,6)}`;
-      p.addObject({id,name:id,type:e.placementObject,x:w.x,y:w.y,yaw:0,enabled:true,metadata:{}});e.setSelection([id]);e.setPlacementObject(null);
+      const objectMetadata =
+        e.placementObject === 'pickup'
+          ? { pickup_dispenser: id }
+          : e.placementObject === 'dropoff'
+            ? { dropoff_ingestor: id }
+            : {};
+      p.addObject({id,name:id,type:e.placementObject,x:w.x,y:w.y,yaw:0,enabled:true,metadata:objectMetadata});e.setSelection([id]);e.setPlacementObject(null);
     } else if (e.tool==='path'||e.tool==='zone') {
       setDrawing(d=>d&&d.kind===e.tool?{...d,points:[...d.points,w]}:{kind:e.tool as 'path'|'zone',points:[w]});
     } else if(e.tool==='measure') setMeasure(m=>[...m,w]);

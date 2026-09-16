@@ -162,11 +162,23 @@ function vertexParams(object: NavigationObject): Record<string, RmfParam> {
   }
 
   if (object.type === 'pickup') {
-    params.pickup_dispenser = [STRING, object.name || object.id];
+    const pickupDispenser =
+      typeof object.metadata?.pickup_dispenser === 'string' &&
+      object.metadata.pickup_dispenser.trim()
+        ? object.metadata.pickup_dispenser.trim()
+        : object.name || object.id;
+
+    params.pickup_dispenser = [STRING, pickupDispenser];
   }
 
   if (object.type === 'dropoff') {
-    params.dropoff_ingestor = [STRING, object.name || object.id];
+    const dropoffIngestor =
+      typeof object.metadata?.dropoff_ingestor === 'string' &&
+      object.metadata.dropoff_ingestor.trim()
+        ? object.metadata.dropoff_ingestor.trim()
+        : object.name || object.id;
+
+    params.dropoff_ingestor = [STRING, dropoffIngestor];
   }
 
   return params;
