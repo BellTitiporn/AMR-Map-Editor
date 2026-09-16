@@ -474,7 +474,44 @@ function PathDirectionOverlay({ path, metadata, scale, showBadge }: { path: Navi
     ];
   }) : [];
 
-  if (!showBadge || path.points.length < 2) return <>{arrows}</>;
+  // Purple arrows show the RMF lane orientation independently from travel direction.
+  // forward  = robot faces from the first vertex toward the next vertex.
+  // backward = robot faces opposite to the path vertex order.
+  const orientationArrows = orientation ? path.points.slice(0, -1).map((q, i) => {
+    const a = worldToPixel(q.x, q.y, metadata);
+    const b = worldToPixel(path.points[i + 1].x, path.points[i + 1].y, metadata);
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const nx = -uy, ny = ux;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+
+    // Offset the orientation arrow so it is still visible when travel-direction
+    // arrows are drawn on top of the same path.
+    const offset = 10 / scale;
+    const half = Math.min(20 / scale, len * .22);
+    const dir = orientation === 'backward' ? -1 : 1;
+    const cx = mx - nx * offset;
+    const cy = my - ny * offset;
+
+    return <Arrow
+      key={`orientation-${orientation}-${i}`}
+      points={[
+        cx - ux * half * dir,
+        cy - uy * half * dir,
+        cx + ux * half * dir,
+        cy + uy * half * dir,
+      ]}
+      pointerLength={7 / scale}
+      pointerWidth={7 / scale}
+      stroke="#7c3aed"
+      fill="#7c3aed"
+      strokeWidth={2.2 / scale}
+      listening={false}
+    />;
+  }) : [];
+
+  if (!showBadge || path.points.length < 2) return <>{arrows}{orientationArrows}</>;
   const segmentIndex = Math.min(path.points.length - 2, Math.floor((path.points.length - 1) / 2));
   const a = worldToPixel(path.points[segmentIndex].x, path.points[segmentIndex].y, metadata);
   const b = worldToPixel(path.points[segmentIndex + 1].x, path.points[segmentIndex + 1].y, metadata);
@@ -486,6 +523,7 @@ function PathDirectionOverlay({ path, metadata, scale, showBadge }: { path: Navi
   const orientationWidth = 118 / scale;
   return <>
     {arrows}
+    {orientationArrows}
     {hasTravelDirection && <Group x={x-width/2} y={y} listening={false}>
       <Rect width={width} height={16/scale} fill="rgba(255,255,255,.94)" stroke={stroke} strokeWidth={1/scale} cornerRadius={2/scale}/>
       <Text width={width} height={16/scale} align="center" verticalAlign="middle" text={text} fontSize={8.5/scale} fontStyle="bold" fill={stroke}/>

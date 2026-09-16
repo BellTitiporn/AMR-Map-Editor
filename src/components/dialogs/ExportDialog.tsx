@@ -6,6 +6,7 @@ import { downloadNavigation,downloadPaths,downloadWaypoints,downloadZones } from
 import { exportPgm,exportRosZip,generateRosYaml } from '../../services/export/rosExporter';
 import { downloadBuildingYaml } from '../../services/export/buildingExporter';
 import { exportRmfBundle } from '../../services/export/rmfBundleExporter';
+import { downloadGeoJson } from '../../services/export/geojsonExporter';
 import { downloadBlob,downloadTextFile,exportBaseName } from '../../utils/files';
 
 export function ExportDialog({onClose}:{onClose:()=>void}){
@@ -26,6 +27,7 @@ export function ExportDialog({onClose}:{onClose:()=>void}){
       else if(type==='paths')downloadPaths(ps,`${base}-paths${selectedSuffix}.json`);
       else if(type==='zones')downloadZones(zs,`${base}-zones${selectedSuffix}.json`);
       else if(type==='navigation')downloadNavigation(p.metadata,os,ps,zs,[p.robot],`${base}-navigation${selectedSuffix}.json`);
+      else if(type==='geojson')downloadGeoJson(p.metadata,os,ps,zs,p.building,`${base}${selectedSuffix}`);
       else if(type==='building')downloadBuildingYaml(p.metadata,p.objects,p.paths,p.building,base);
       else if(type==='rmfBundle'){
         if(!p.image)throw new Error('RMF Bundle export requires an occupancy map image.');
@@ -51,7 +53,7 @@ export function ExportDialog({onClose}:{onClose:()=>void}){
       <small>Example: <code>{base}.amrmap</code> / <code>{base}-navigation.json</code></small>
     </div>
     <div className="exportgrid">
-      {[['project','AMR Project'],['ros','ROS Map (.zip)'],['png','Occupancy PNG'],['pgm','PGM'],['yaml','YAML'],['building','RMF Building (.building.yaml)'],['rmfBundle','RMF Bundle (.zip: building + PNG + navigation)'],['waypoints','Waypoints JSON'],['paths','Paths JSON'],['zones','Zones JSON'],['navigation','Navigation JSON (Waypoints + Paths + Zones)']].map(([id,label])=><div className="exportrow" key={id}><b>{label}</b><button disabled={busy} onClick={()=>void run(id,false)}>Export All</button>{['waypoints','paths','zones','navigation'].includes(id)&&<button disabled={busy||!selection.length} onClick={()=>void run(id,true)}>Export Selected</button>}</div>)}
+      {[['project','AMR Project'],['ros','ROS Map (.zip)'],['png','Occupancy PNG'],['pgm','PGM'],['yaml','YAML'],['building','RMF Building (.building.yaml)'],['rmfBundle','RMF Bundle (.zip: building + PNG + navigation)'],['geojson','GeoJSON (.geojson)'],['waypoints','Waypoints JSON'],['paths','Paths JSON'],['zones','Zones JSON'],['navigation','Navigation JSON (Waypoints + Paths + Zones)']].map(([id,label])=><div className="exportrow" key={id}><b>{label}</b><button disabled={busy} onClick={()=>void run(id,false)}>Export All</button>{['waypoints','paths','zones','navigation','geojson'].includes(id)&&<button disabled={busy||!selection.length} onClick={()=>void run(id,true)}>Export Selected</button>}</div>)}
     </div>
     <div className="modalactions"><button onClick={onClose} disabled={busy}>Close</button></div>
   </div></div>;
