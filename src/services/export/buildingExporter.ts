@@ -2,10 +2,20 @@ import YAML from 'yaml';
 import type { MapMetadata, NavigationObject, NavigationPath } from '../../models';
 import { downloadTextFile, exportBaseName } from '../../utils/files';
 
+/**
+ * Open-RMF / Traffic Editor native-style building.yaml exporter.
+ *
+ * Main differences from the old exporter:
+ * - coordinate_system: reference_image
+ * - world coordinates are converted back to reference-image coordinates
+ * - includes crowd_sim + graphs + Traffic Editor style level sections
+ * - exports floors / walls / doors / models / measurements when present
+ * - preserves RMF lane orientation: '', 'forward', 'backward'
+ * - keeps backward-compatible 4-argument APIs and the newer 5-argument APIs
+ */
+
 type RmfParam = [1 | 2 | 3 | 4, string | number | boolean];
-type RmfVertex =
-  | [number, number, number, string]
-  | [number, number, number, string, Record<string, RmfParam>];
+type RmfVertex = [number, number, number, string] | [number, number, number, string, Record<string, RmfParam>];
 type RmfLane = [number, number, Record<string, RmfParam>];
 type XY = { x: number; y: number };
 
@@ -30,6 +40,7 @@ export interface BuildingYamlOptions {
   elevation?: number;
   drawingFilename?: string;
   scanLayerName?: string;
+  includeScanLayer?: boolean;
   includeCrowdSim?: boolean;
   includeScaleMeasurement?: boolean;
   navmeshFilename?: string;
@@ -41,73 +52,59 @@ const DOUBLE = 3 as const;
 const BOOL = 4 as const;
 const EPS = 1e-6;
 
-function finite(value: unknown, fallback = 0): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
+/**
+ * Traffic Editor should see one graph vertex at a connected lane junction.
+ *
+ * Path endpoints in the editor are stored as floating-point world coordinates.
+ * Small numerical differences can make two visually connected endpoints export
+ * as two separate Traffic Editor vertices.
+ *
+ * 0.02 m = 2 cm: large enough to absorb floating-point / drag noise, but small
+ * enough to avoid merging normal navigation vertices that are intentionally
+ * separated.
+ */
+const LANE_VERTEX_MERGE_EPSILON_M = 0.02;
 
 function isBuildingLike(value: unknown): value is BuildingLike {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
-  return (
-    'config' in v ||
-    'walls' in v ||
-    'doors' in v ||
-    'floors' in v ||
-    'models' in v ||
-    'measurements' in v
+  return !!(
+    'config' in v || 'walls' in v || 'doors' in v || 'floors' in v ||
+    'models' in v || 'measurements' in v
   );
+}
+
+function finite(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 function pointFrom(value: any, fallback?: XY): XY {
   if (value && Number.isFinite(value.x) && Number.isFinite(value.y)) {
     return { x: Number(value.x), y: Number(value.y) };
   }
-
-  if (
-    Array.isArray(value) &&
-    value.length >= 2 &&
-    Number.isFinite(value[0]) &&
-    Number.isFinite(value[1])
-  ) {
+  if (Array.isArray(value) && value.length >= 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])) {
     return { x: Number(value[0]), y: Number(value[1]) };
   }
-
   return fallback ?? { x: 0, y: 0 };
 }
 
 /**
- * Convert ROS/world metres to Traffic Editor reference_image coordinates.
- *
- * ROS map convention:
- * world = origin + R(originYaw) * local_map_metres
- *
- * reference_image convention:
- * x = image pixel X
- * y = image pixel Y, increasing downward
+ * Convert editor world coordinates (metres, +Y up) into Traffic Editor
+ * reference_image coordinates (pixels, +Y down).
  */
 export function worldToReferenceImage(
   point: XY,
   metadata: MapMetadata,
 ): XY {
-  const resolution = Math.max(finite(metadata.resolution, 0.05), EPS);
+  const resolution = finite(metadata.resolution, 0.05);
+  const safeResolution = resolution > 0 ? resolution : 0.05;
   const originX = finite(metadata.originX, 0);
   const originY = finite(metadata.originY, 0);
-  const yaw = finite(metadata.originYaw, 0);
   const height = finite(metadata.height, 0);
 
-  const dx = point.x - originX;
-  const dy = point.y - originY;
-
-  const cos = Math.cos(yaw);
-  const sin = Math.sin(yaw);
-
-  // R(-yaw) * [dx, dy]
-  const localX = cos * dx + sin * dy;
-  const localY = -sin * dx + cos * dy;
-
   return {
-    x: localX / resolution,
-    y: height - localY / resolution,
+    x: (point.x - originX) / safeResolution,
+    y: height - (point.y - originY) / safeResolution,
   };
 }
 
@@ -115,21 +112,15 @@ export function referenceImageToWorld(
   point: XY,
   metadata: MapMetadata,
 ): XY {
-  const resolution = Math.max(finite(metadata.resolution, 0.05), EPS);
+  const resolution = finite(metadata.resolution, 0.05);
+  const safeResolution = resolution > 0 ? resolution : 0.05;
   const originX = finite(metadata.originX, 0);
   const originY = finite(metadata.originY, 0);
-  const yaw = finite(metadata.originYaw, 0);
   const height = finite(metadata.height, 0);
 
-  const localX = point.x * resolution;
-  const localY = (height - point.y) * resolution;
-
-  const cos = Math.cos(yaw);
-  const sin = Math.sin(yaw);
-
   return {
-    x: originX + cos * localX - sin * localY,
-    y: originY + sin * localX + cos * localY,
+    x: originX + point.x * safeResolution,
+    y: originY + (height - point.y) * safeResolution,
   };
 }
 
@@ -137,49 +128,21 @@ function samePoint(a: XY, b: XY): boolean {
   return Math.abs(a.x - b.x) <= 1e-4 && Math.abs(a.y - b.y) <= 1e-4;
 }
 
-/**
- * Only standard Traffic Editor/RMF parameters are exported.
- * Custom AMR fields such as amr_yaw/amr_object_type are intentionally omitted
- * so the YAML stays close to the provided reference file.
- */
 function vertexParams(object: NavigationObject): Record<string, RmfParam> {
   const params: Record<string, RmfParam> = {};
 
-  if (object.type === 'charging_station') {
-    params.is_charger = [BOOL, true];
+  if (object.type === 'charging_station') params.is_charger = [BOOL, true];
+  if (object.type === 'parking') params.is_parking_spot = [BOOL, true];
+  if (object.type === 'waiting') params.is_holding_point = [BOOL, true];
+  if (object.type === 'docking_station') params.dock_name = [STRING, object.name || object.id];
+  if (object.type === 'pickup') params.pickup_dispenser = [STRING, object.name || object.id];
+  if (object.type === 'dropoff') params.dropoff_ingestor = [STRING, object.name || object.id];
+
+  // Keep AMR-specific metadata. Traffic Editor will preserve unknown parameters.
+  if (Math.abs(finite((object as any).yaw, 0)) > EPS) {
+    params.amr_yaw = [DOUBLE, finite((object as any).yaw, 0)];
   }
-
-  if (object.type === 'parking') {
-    params.is_parking_spot = [BOOL, true];
-  }
-
-  if (object.type === 'waiting') {
-    params.is_holding_point = [BOOL, true];
-  }
-
-  if (object.type === 'docking_station') {
-    params.dock_name = [STRING, object.name || object.id];
-  }
-
-  if (object.type === 'pickup') {
-    const pickupDispenser =
-      typeof object.metadata?.pickup_dispenser === 'string' &&
-      object.metadata.pickup_dispenser.trim()
-        ? object.metadata.pickup_dispenser.trim()
-        : object.name || object.id;
-
-    params.pickup_dispenser = [STRING, pickupDispenser];
-  }
-
-  if (object.type === 'dropoff') {
-    const dropoffIngestor =
-      typeof object.metadata?.dropoff_ingestor === 'string' &&
-      object.metadata.dropoff_ingestor.trim()
-        ? object.metadata.dropoff_ingestor.trim()
-        : object.name || object.id;
-
-    params.dropoff_ingestor = [STRING, dropoffIngestor];
-  }
+  params.amr_object_type = [STRING, object.type];
 
   return params;
 }
@@ -187,48 +150,21 @@ function vertexParams(object: NavigationObject): Record<string, RmfParam> {
 function wallParams(wall: any): Record<string, RmfParam> {
   return {
     alpha: [DOUBLE, finite(wall?.alpha, 1)],
-    texture_height: [
-      DOUBLE,
-      finite(wall?.textureHeight ?? wall?.texture_height, 2.5),
-    ],
-    texture_name: [
-      STRING,
-      String(wall?.textureName ?? wall?.texture_name ?? 'default'),
-    ],
-    texture_scale: [
-      DOUBLE,
-      finite(wall?.textureScale ?? wall?.texture_scale, 1),
-    ],
-    texture_width: [
-      DOUBLE,
-      finite(wall?.textureWidth ?? wall?.texture_width, 1),
-    ],
+    texture_height: [DOUBLE, finite(wall?.textureHeight ?? wall?.texture_height, 2.5)],
+    texture_name: [STRING, String(wall?.textureName ?? wall?.texture_name ?? 'default')],
+    texture_scale: [DOUBLE, finite(wall?.textureScale ?? wall?.texture_scale, 1)],
+    texture_width: [DOUBLE, finite(wall?.textureWidth ?? wall?.texture_width, 1)],
   };
 }
 
 function floorParams(floor: any): Record<string, RmfParam> {
   return {
-    ceiling_scale: [
-      DOUBLE,
-      finite(floor?.ceilingScale ?? floor?.ceiling_scale, 1),
-    ],
-    ceiling_texture: [
-      STRING,
-      String(floor?.ceilingTexture ?? floor?.ceiling_texture ?? 'blue_linoleum'),
-    ],
+    ceiling_scale: [DOUBLE, finite(floor?.ceilingScale ?? floor?.ceiling_scale, 1)],
+    ceiling_texture: [STRING, String(floor?.ceilingTexture ?? floor?.ceiling_texture ?? 'blue_linoleum')],
     indoor: [INT, floor?.indoor === false ? 0 : 1],
-    texture_name: [
-      STRING,
-      String(floor?.textureName ?? floor?.texture_name ?? 'blue_linoleum'),
-    ],
-    texture_rotation: [
-      DOUBLE,
-      finite(floor?.textureRotation ?? floor?.texture_rotation, 0),
-    ],
-    texture_scale: [
-      DOUBLE,
-      finite(floor?.textureScale ?? floor?.texture_scale, 1),
-    ],
+    texture_name: [STRING, String(floor?.textureName ?? floor?.texture_name ?? 'blue_linoleum')],
+    texture_rotation: [DOUBLE, finite(floor?.textureRotation ?? floor?.texture_rotation, 0)],
+    texture_scale: [DOUBLE, finite(floor?.textureScale ?? floor?.texture_scale, 1)],
   };
 }
 
@@ -236,42 +172,20 @@ function doorParams(door: any): Record<string, RmfParam> {
   const params: Record<string, RmfParam> = {
     name: [STRING, String(door?.name ?? door?.id ?? 'door')],
     type: [STRING, String(door?.type ?? door?.doorType ?? 'sliding')],
-    motion_axis: [
-      STRING,
-      String(door?.motionAxis ?? door?.motion_axis ?? 'start'),
-    ],
-    motion_degrees: [
-      DOUBLE,
-      finite(door?.motionDegrees ?? door?.motion_degrees, 90),
-    ],
-    motion_direction: [
-      INT,
-      finite(door?.motionDirection ?? door?.motion_direction, 1),
-    ],
+    motion_axis: [STRING, String(door?.motionAxis ?? door?.motion_axis ?? 'start')],
+    motion_degrees: [DOUBLE, finite(door?.motionDegrees ?? door?.motion_degrees, 90)],
+    motion_direction: [INT, finite(door?.motionDirection ?? door?.motion_direction, 1)],
   };
-
-  if (door?.plugin != null && String(door.plugin) !== '') {
-    params.plugin = [STRING, String(door.plugin)];
-  }
-
+  if (door?.plugin != null) params.plugin = [STRING, String(door.plugin)];
   if (door?.rightLeftRatio != null || door?.right_left_ratio != null) {
-    params.right_left_ratio = [
-      DOUBLE,
-      finite(door?.rightLeftRatio ?? door?.right_left_ratio, 1),
-    ];
+    params.right_left_ratio = [DOUBLE, finite(door?.rightLeftRatio ?? door?.right_left_ratio, 1)];
   }
-
   return params;
 }
 
 function getSegment(entity: any): [XY, XY] {
-  const a = pointFrom(
-    entity?.start ?? entity?.a ?? entity?.p1 ?? entity?.points?.[0],
-  );
-  const b = pointFrom(
-    entity?.end ?? entity?.b ?? entity?.p2 ?? entity?.points?.[1],
-    a,
-  );
+  const a = pointFrom(entity?.start ?? entity?.a ?? entity?.p1 ?? entity?.points?.[0]);
+  const b = pointFrom(entity?.end ?? entity?.b ?? entity?.p2 ?? entity?.points?.[1], a);
   return [a, b];
 }
 
@@ -284,13 +198,9 @@ function makeCrowdSim(navmeshFilename: string) {
   return {
     agent_groups: [
       {
-        agents_name: [],
-        agents_number: 0,
-        group_id: 0,
-        profile_selector: 'external_agent',
-        state_selector: 'external_static',
-        x: 0,
-        y: 0,
+        agents_name: [], agents_number: 0, group_id: 0,
+        profile_selector: 'external_agent', state_selector: 'external_static',
+        x: 0, y: 0,
       },
     ],
     agent_profiles: [
@@ -312,18 +222,9 @@ function makeCrowdSim(navmeshFilename: string) {
     enable: 0,
     goal_sets: [],
     model_types: [],
-    obstacle_set: {
-      class: 1,
-      file_name: navmeshFilename,
-      type: 'nav_mesh',
-    },
+    obstacle_set: { class: 1, file_name: navmeshFilename, type: 'nav_mesh' },
     states: [
-      {
-        final: 1,
-        goal_set: -1,
-        name: 'external_static',
-        navmesh_file_name: '',
-      },
+      { final: 1, goal_set: -1, name: 'external_static', navmesh_file_name: '' },
     ],
     transitions: [],
     update_time_step: 0.1,
@@ -331,20 +232,14 @@ function makeCrowdSim(navmeshFilename: string) {
 }
 
 function normalizeArgs(
+  metadata: MapMetadata,
   buildingOrOptions?: BuildingLike | BuildingYamlOptions,
   maybeOptions?: BuildingYamlOptions,
 ): { building: BuildingLike; options: BuildingYamlOptions } {
   if (isBuildingLike(buildingOrOptions)) {
-    return {
-      building: buildingOrOptions,
-      options: maybeOptions ?? {},
-    };
+    return { building: buildingOrOptions, options: maybeOptions ?? {} };
   }
-
-  return {
-    building: {},
-    options: (buildingOrOptions as BuildingYamlOptions | undefined) ?? {},
-  };
+  return { building: {}, options: (buildingOrOptions as BuildingYamlOptions | undefined) ?? {} };
 }
 
 export function buildingPayload(
@@ -354,55 +249,47 @@ export function buildingPayload(
   buildingOrOptions: BuildingLike | BuildingYamlOptions = {},
   maybeOptions: BuildingYamlOptions = {},
 ) {
-  const { building, options } = normalizeArgs(
-    buildingOrOptions,
-    maybeOptions,
-  );
-
+  const { building, options } = normalizeArgs(metadata, buildingOrOptions, maybeOptions);
   const cfg = building.config ?? {};
 
-  const buildingName =
-    options.buildingName ||
-    cfg.buildingName ||
-    metadata.name ||
-    'AMR_Map';
-
-  const levelName =
-    options.levelName ||
-    cfg.levelName ||
-    'L1';
-
-  const elevation = finite(
-    options.elevation ?? cfg.elevation,
-    0,
-  );
-
-  const drawingFilename =
-    options.drawingFilename ||
-    `${exportBaseName(buildingName, 'map')}.png`;
-
+  const buildingName = options.buildingName || cfg.buildingName || metadata.name || 'AMR_Map';
+  const levelName = options.levelName || cfg.levelName || 'L1';
+  const referenceLevelName = options.referenceLevelName || cfg.referenceLevelName || levelName;
+  const elevation = finite(options.elevation ?? cfg.elevation, 0);
+  const drawingFilename = options.drawingFilename || `${exportBaseName(buildingName, 'map')}.png`;
+  const scanLayerName = options.scanLayerName || 'scan';
+  const includeScanLayer = options.includeScanLayer !== false;
   const includeCrowdSim = options.includeCrowdSim !== false;
-  const includeScaleMeasurement =
-    options.includeScaleMeasurement !== false;
-
-  const navmeshFilename =
-    options.navmeshFilename ||
-    `${exportBaseName(levelName, 'L1')}_navmesh.nav`;
-
-  const scanLayerName =
-    options.scanLayerName || 'scan';
+  const includeScaleMeasurement = options.includeScaleMeasurement !== false;
+  const navmeshFilename = options.navmeshFilename || `${exportBaseName(levelName, 'L1')}_navmesh.nav`;
 
   const vertices: RmfVertex[] = [];
   const vertexXY: XY[] = [];
+  const vertexWorldXY: XY[] = [];
+
+  const worldDistance = (a: XY, b: XY) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
 
   const findOrAddRefVertex = (
     world: XY,
     name = '',
     params: Record<string, RmfParam> = {},
+    mergeToleranceM = 1e-6,
   ): number => {
     const ref = worldToReferenceImage(world, metadata);
 
-    const existing = vertexXY.findIndex(v => samePoint(v, ref));
+    // First compare in WORLD METRES. This is the important check for lane
+    // topology because two connected path endpoints may differ by tiny
+    // floating-point amounts before conversion to reference-image pixels.
+    let existing = vertexWorldXY.findIndex(
+      v => worldDistance(v, world) <= mergeToleranceM,
+    );
+
+    // Keep the old reference-image equality check as a fallback for exact
+    // geometry imported through other building entities.
+    if (existing < 0) {
+      existing = vertexXY.findIndex(v => samePoint(v, ref));
+    }
 
     if (existing >= 0) {
       const current = vertices[existing];
@@ -425,280 +312,167 @@ export function buildingPayload(
       return existing;
     }
 
-    const row: RmfVertex =
-      Object.keys(params).length > 0
-        ? [ref.x, ref.y, 0, name, params]
-        : [ref.x, ref.y, 0, name];
+    const row: RmfVertex = Object.keys(params).length
+      ? [ref.x, ref.y, 0, name, params]
+      : [ref.x, ref.y, 0, name];
 
     vertices.push(row);
     vertexXY.push(ref);
+    vertexWorldXY.push({ ...world });
 
     return vertices.length - 1;
   };
 
-  /**
-   * Reference file contains a calibration measurement.
-   * Prefer a real project measurement. If there is none, generate one across
-   * the full image width so its value exactly matches width * resolution.
-   */
+  // Traffic Editor reference_image maps need scale information. When the project
+  // has no user measurement, create a 1-metre calibration segment.
   const measurements: any[] = [];
-
-  const projectMeasurements =
-    (building.measurements ?? [])
-      .filter((m: any) => m?.enabled !== false);
-
-  if (projectMeasurements.length) {
-    for (const measurement of projectMeasurements) {
-      const [a, b] = getSegment(measurement);
-      const start = findOrAddRefVertex(a);
-      const end = findOrAddRefVertex(b);
-
-      measurements.push([
-        start,
-        end,
-        {
-          distance: [
-            DOUBLE,
-            finite(
-              measurement?.distance,
-              Math.hypot(b.x - a.x, b.y - a.y),
-            ),
-          ],
-        },
-      ]);
+  const buildingMeasurements = (building.measurements ?? []).filter((m: any) => m?.enabled !== false);
+  if (buildingMeasurements.length) {
+    for (const m of buildingMeasurements) {
+      const [a, b] = getSegment(m);
+      const ia = findOrAddRefVertex(a);
+      const ib = findOrAddRefVertex(b);
+      const d = finite(m?.distance, Math.hypot(b.x - a.x, b.y - a.y));
+      measurements.push([ia, ib, { distance: [DOUBLE, d] }]);
     }
   } else if (includeScaleMeasurement) {
-    const leftBottom = referenceImageToWorld(
-      { x: 0, y: finite(metadata.height, 0) },
-      metadata,
-    );
-
-    const rightBottom = referenceImageToWorld(
-      {
-        x: finite(metadata.width, 0),
-        y: finite(metadata.height, 0),
-      },
-      metadata,
-    );
-
-    const start = findOrAddRefVertex(leftBottom);
-    const end = findOrAddRefVertex(rightBottom);
-
-    measurements.push([
-      start,
-      end,
-      {
-        distance: [
-          DOUBLE,
-          finite(metadata.width, 0) *
-            Math.max(finite(metadata.resolution, 0.05), EPS),
-        ],
-      },
-    ]);
+    const originWorld = { x: finite(metadata.originX, 0), y: finite(metadata.originY, 0) };
+    const oneMetreWorld = { x: originWorld.x + 1, y: originWorld.y };
+    const ia = findOrAddRefVertex(originWorld);
+    const ib = findOrAddRefVertex(oneMetreWorld);
+    measurements.push([ia, ib, { distance: [DOUBLE, 1] }]);
   }
 
-  for (const object of objects.filter(x => x.enabled !== false)) {
+  // Navigation objects become named graph vertices.
+  for (const object of objects.filter(o => o.enabled !== false)) {
     findOrAddRefVertex(
-      {
-        x: finite(object.x, 0),
-        y: finite(object.y, 0),
-      },
+      { x: finite((object as any).x), y: finite((object as any).y) },
       object.name || object.id,
       vertexParams(object),
+      LANE_VERTEX_MERGE_EPSILON_M,
     );
   }
 
+  // Building geometry shares the same Traffic Editor vertex table.
   const walls: any[] = [];
-
-  for (
-    const wall of
-    (building.walls ?? [])
-      .filter((x: any) => x?.enabled !== false)
-  ) {
+  for (const wall of (building.walls ?? []).filter((x: any) => x?.enabled !== false)) {
     const [a, b] = getSegment(wall);
-    const start = findOrAddRefVertex(a);
-    const end = findOrAddRefVertex(b);
-
-    if (start !== end) {
-      walls.push([
-        start,
-        end,
-        wallParams(wall),
-      ]);
-    }
+    const ia = findOrAddRefVertex(a);
+    const ib = findOrAddRefVertex(b);
+    if (ia !== ib) walls.push([ia, ib, wallParams(wall)]);
   }
 
   const doors: any[] = [];
-
-  for (
-    const door of
-    (building.doors ?? [])
-      .filter((x: any) => x?.enabled !== false)
-  ) {
+  for (const door of (building.doors ?? []).filter((x: any) => x?.enabled !== false)) {
     const [a, b] = getSegment(door);
-    const start = findOrAddRefVertex(a);
-    const end = findOrAddRefVertex(b);
-
-    if (start !== end) {
-      doors.push([
-        start,
-        end,
-        doorParams(door),
-      ]);
-    }
+    const ia = findOrAddRefVertex(a);
+    const ib = findOrAddRefVertex(b);
+    if (ia !== ib) doors.push([ia, ib, doorParams(door)]);
   }
 
   const floors: any[] = [];
-
-  for (
-    const floor of
-    (building.floors ?? [])
-      .filter((x: any) => x?.enabled !== false)
-  ) {
-    const polygon = getPolygon(floor);
-
-    if (polygon.length < 3) continue;
-
-    floors.push({
-      parameters: floorParams(floor),
-      vertices: polygon.map(p => findOrAddRefVertex(p)),
-    });
+  for (const floor of (building.floors ?? []).filter((x: any) => x?.enabled !== false)) {
+    const points = getPolygon(floor);
+    if (points.length < 3) continue;
+    const indices = points.map(p => findOrAddRefVertex(p));
+    floors.push({ parameters: floorParams(floor), vertices: indices });
   }
 
   const models: any[] = [];
-
-  for (
-    const model of
-    (building.models ?? [])
-      .filter((x: any) => x?.enabled !== false)
-  ) {
-    const ref = worldToReferenceImage(
-      {
-        x: finite(model?.x, 0),
-        y: finite(model?.y, 0),
-      },
-      metadata,
-    );
-
+  for (const model of (building.models ?? []).filter((x: any) => x?.enabled !== false)) {
+    const ref = worldToReferenceImage(pointFrom(model), metadata);
+    const params: Record<string, RmfParam> = {
+      is_static: [BOOL, model?.isStatic ?? model?.static ?? true],
+      dispensable: [BOOL, model?.dispensable ?? false],
+    };
     models.push([
       ref.x,
       ref.y,
       finite(model?.yaw, 0),
       String(model?.name ?? model?.id ?? ''),
       String(model?.modelName ?? model?.model_name ?? ''),
-      {
-        is_static: [
-          BOOL,
-          model?.isStatic ?? model?.static ?? true,
-        ],
-        dispensable: [
-          BOOL,
-          model?.dispensable ?? false,
-        ],
-      },
+      params,
     ]);
   }
 
   const lanes: RmfLane[] = [];
-
-  for (
-    const path of
-    paths.filter(
-      p => p.enabled !== false && p.points.length >= 2,
-    )
-  ) {
+  for (const path of paths.filter(p => p.enabled !== false && p.points.length >= 2)) {
     for (let i = 0; i < path.points.length - 1; i += 1) {
-      const start = findOrAddRefVertex(path.points[i]);
-      const end = findOrAddRefVertex(path.points[i + 1]);
-
+      const start = findOrAddRefVertex(
+        path.points[i],
+        '',
+        {},
+        LANE_VERTEX_MERGE_EPSILON_M,
+      );
+      const end = findOrAddRefVertex(
+        path.points[i + 1],
+        '',
+        {},
+        LANE_VERTEX_MERGE_EPSILON_M,
+      );
       if (start === end) continue;
 
-      const orientation =
-        path.orientation === 'forward' ||
-        path.orientation === 'backward'
-          ? path.orientation
-          : '';
+      const orientation = (path as any).orientation;
+      const normalizedOrientation = orientation === 'forward' || orientation === 'backward' ? orientation : '';
 
       lanes.push([
         start,
         end,
         {
-          bidirectional: [
-            BOOL,
-            path.type !== 'one_way',
-          ],
+          bidirectional: [BOOL, path.type !== 'one_way'],
           demo_mock_floor_name: [STRING, ''],
           demo_mock_lift_name: [STRING, ''],
           graph_idx: [INT, 0],
-          orientation: [STRING, orientation],
-          speed_limit: [
-            DOUBLE,
-            finite(path.maxSpeed, 0),
-          ],
+          orientation: [STRING, normalizedOrientation],
+          speed_limit: [DOUBLE, finite(path.maxSpeed, 0)],
         },
       ]);
     }
   }
 
-  /**
-   * The reference contains a scan layer. Keep only the fields that can be
-   * derived reliably from the project; no synthetic feature/constraint IDs.
-   */
-  const layers = {
-    [scanLayerName]: {
+  const layers: Record<string, any> = {};
+  if (includeScanLayer && drawingFilename) {
+    layers[scanLayerName] = {
       color: [1, 0, 0, 0.5],
       features: [],
       filename: drawingFilename,
       transform: {
-        scale: Math.max(
-          finite(metadata.resolution, 0.05),
-          EPS,
-        ),
+        scale: finite(metadata.resolution, 0.05),
         translation_x: 0,
         translation_y: 0,
-        yaw: finite(metadata.originYaw, 0),
+        yaw: finite((metadata as any).originYaw, 0),
       },
       visible: true,
-    },
-  };
+    };
+  }
 
-  const level: Record<string, unknown> = {
+  const level = {
     constraints: [],
-    drawing: {
-      filename: drawingFilename,
-    },
+    drawing: { filename: drawingFilename },
     elevation,
     features: [],
     floors,
     lanes,
     layers,
     measurements,
+    models,
     vertices,
     walls,
+    ...(doors.length ? { doors } : {}),
   };
-
-  // Keep optional sections only when data actually exists.
-  if (doors.length) {
-    level.doors = doors;
-  }
-
-  if (models.length) {
-    level.models = models;
-  }
 
   return {
     coordinate_system: 'reference_image',
-    ...(includeCrowdSim
-      ? {
-          crowd_sim: makeCrowdSim(navmeshFilename),
-        }
-      : {}),
+    ...(includeCrowdSim ? { crowd_sim: makeCrowdSim(navmeshFilename) } : {}),
     graphs: {},
-    levels: {
-      [levelName]: level,
-    },
+    levels: { [levelName]: level },
     lifts: {},
     name: buildingName,
+    // Traffic Editor accepts reference_level_name in newer generated files;
+    // keep it out by default to more closely match classic reference_image files.
+    ...(referenceLevelName && referenceLevelName !== levelName
+      ? { reference_level_name: referenceLevelName }
+      : {}),
   };
 }
 
@@ -710,19 +484,17 @@ export function generateBuildingYaml(
   maybeOptions: BuildingYamlOptions = {},
 ): string {
   return YAML.stringify(
-    buildingPayload(
-      metadata,
-      objects,
-      paths,
-      buildingOrOptions,
-      maybeOptions,
-    ),
-    {
-      lineWidth: 0,
-    },
+    buildingPayload(metadata, objects, paths, buildingOrOptions, maybeOptions),
+    { lineWidth: 0 },
   );
 }
 
+/**
+ * Supports both:
+ *   downloadBuildingYaml(metadata, objects, paths, 'map')
+ * and the v0.11+ call:
+ *   downloadBuildingYaml(metadata, objects, paths, building, 'map')
+ */
 export function downloadBuildingYaml(
   metadata: MapMetadata,
   objects: NavigationObject[],
@@ -730,44 +502,17 @@ export function downloadBuildingYaml(
   buildingOrFileName: BuildingLike | string = {},
   maybeFileName = 'map',
 ): void {
-  const building =
-    typeof buildingOrFileName === 'string'
-      ? {}
-      : buildingOrFileName;
+  const building = typeof buildingOrFileName === 'string' ? {} : buildingOrFileName;
+  const requestedName = typeof buildingOrFileName === 'string' ? buildingOrFileName : maybeFileName;
+  const base = exportBaseName(requestedName, 'map');
 
-  const requestedName =
-    typeof buildingOrFileName === 'string'
-      ? buildingOrFileName
-      : maybeFileName;
+  const text = generateBuildingYaml(metadata, objects, paths, building, {
+    buildingName: building.config?.buildingName || metadata.name || base,
+    levelName: building.config?.levelName || 'L1',
+    referenceLevelName: building.config?.referenceLevelName || building.config?.levelName || 'L1',
+    drawingFilename: `${base}.png`,
+    navmeshFilename: `${base}_navmesh.nav`,
+  });
 
-  const base = exportBaseName(
-    requestedName,
-    'map',
-  );
-
-  const text = generateBuildingYaml(
-    metadata,
-    objects,
-    paths,
-    building,
-    {
-      buildingName:
-        building.config?.buildingName ||
-        metadata.name ||
-        base,
-      levelName:
-        building.config?.levelName ||
-        'L1',
-      elevation:
-        building.config?.elevation ?? 0,
-      drawingFilename: `${base}.png`,
-      navmeshFilename: `${base}_navmesh.nav`,
-    },
-  );
-
-  downloadTextFile(
-    text,
-    `${base}.building.yaml`,
-    'application/yaml;charset=utf-8',
-  );
+  downloadTextFile(text, `${base}.building.yaml`, 'application/yaml;charset=utf-8');
 }

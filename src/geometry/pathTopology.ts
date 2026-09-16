@@ -39,6 +39,26 @@ export interface MergeResult {
 
 const dist = (a: Point2D, b: Point2D) => Math.hypot(a.x - b.x, a.y - b.y);
 
+/**
+ * Remove duplicate consecutive vertices without changing path topology.
+ * This is mainly used after a snap/connect operation so a junction cannot
+ * create two almost-identical points inside the same path.
+ */
+function dedupeConsecutivePoints(points: Point2D[], epsilon = PATH_CONNECT_EPSILON_M): Point2D[] {
+  if (points.length <= 2) return points.map(point => ({ ...point }));
+
+  const deduped: Point2D[] = [];
+  for (const point of points) {
+    const previous = deduped[deduped.length - 1];
+    if (!previous || dist(previous, point) > epsilon) {
+      deduped.push({ ...point });
+    }
+  }
+
+  // A NavigationPath must keep at least two points.
+  return deduped.length >= 2 ? deduped : points.map(point => ({ ...point }));
+}
+
 function endpointIndex(path: NavigationPath, endpoint: PathEndpoint): number {
   return endpoint === 'start' ? 0 : path.points.length - 1;
 }
@@ -83,9 +103,17 @@ export function findNearestSnapCandidate(
     });
 
     for (let segmentIndex = 0; segmentIndex < other.points.length - 1; segmentIndex += 1) {
-      const projected = closestPointOnSegment(source, other.points[segmentIndex], other.points[segmentIndex + 1]);
-      // Endpoint/vertex candidates are preferred over segment candidates when the projection is effectively at a vertex.
+      const segmentStart = other.points[segmentIndex];
+      const segmentEnd = other.points[segmentIndex + 1];
+      const projected = closestPointOnSegment(source, segmentStart, segmentEnd);
+
+      // If either real segment vertex is already within snap range, do not create
+      // a second junction beside it. The path_vertex candidate above must win.
+      if (dist(source, segmentStart) <= maxDistance || dist(source, segmentEnd) <= maxDistance) continue;
+
+      // Protect against numeric projections landing effectively on an endpoint.
       if (projected.t <= 1e-6 || projected.t >= 1 - 1e-6) continue;
+
       if (projected.distance <= maxDistance) {
         candidates.push({
           kind: 'path_segment',
@@ -118,18 +146,40 @@ export function connectPathEndpoint(
   const candidate = findNearestSnapCandidate(paths, objects, pathId, endpoint, maxDistance);
   if (!candidate) return { paths, candidate: null };
 
+  const currentPath = paths.find(path => path.id === pathId);
+  if (!currentPath) return { paths, candidate: null };
+
+  // Already connected to this exact coordinate: do not create/insert anything.
+  const currentEndpoint = endpointPoint(currentPath, endpoint);
+  if (dist(currentEndpoint, candidate.point) <= PATH_CONNECT_EPSILON_M) {
+    return { paths, candidate };
+  }
+
   const next = paths.map(path => ({ ...path, points: path.points.map(point => ({ ...point })) }));
   const sourcePath = next.find(path => path.id === pathId);
   if (!sourcePath) return { paths, candidate: null };
+  // Always snap to the candidate's exact canonical coordinate.
   sourcePath.points[endpointIndex(sourcePath, endpoint)] = { ...candidate.point };
 
   if (candidate.kind === 'path_segment') {
     const target = next.find(path => path.id === candidate.targetId);
     if (target) {
-      const alreadyVertex = target.points.some(point => dist(point, candidate.point) <= PATH_CONNECT_EPSILON_M);
-      if (!alreadyVertex) target.points.splice(candidate.segmentIndex + 1, 0, { ...candidate.point });
+      const existingVertex = target.points.find(
+        point => dist(point, candidate.point) <= PATH_CONNECT_EPSILON_M,
+      );
+
+      if (existingVertex) {
+        // Reuse the existing vertex coordinate rather than inserting another one.
+        sourcePath.points[endpointIndex(sourcePath, endpoint)] = { ...existingVertex };
+      } else {
+        target.points.splice(candidate.segmentIndex + 1, 0, { ...candidate.point });
+      }
+
+      target.points = dedupeConsecutivePoints(target.points);
     }
   }
+
+  sourcePath.points = dedupeConsecutivePoints(sourcePath.points);
 
   return { paths: next, candidate };
 }

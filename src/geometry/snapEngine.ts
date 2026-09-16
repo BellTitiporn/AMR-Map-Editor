@@ -66,8 +66,16 @@ export function findSnapTarget(
     }
     if (allowed.has('path_segment')) {
       for (let i = 0; i < path.points.length - 1; i += 1) {
-        const projected = closestPointOnSegment(point, path.points[i], path.points[i + 1]);
+        const segmentStart = path.points[i];
+        const segmentEnd = path.points[i + 1];
+        const projected = closestPointOnSegment(point, segmentStart, segmentEnd);
+
+        // A nearby real path vertex must win over a projected segment point.
+        // Otherwise snapping close to an endpoint can create two almost-overlapping
+        // junction vertices.
+        if (distance(point, segmentStart) <= maxDistance || distance(point, segmentEnd) <= maxDistance) continue;
         if (projected.t <= 1e-6 || projected.t >= 1 - 1e-6) continue;
+
         if (projected.distance <= maxDistance) candidates.push({
           kind: 'path_segment', point: projected.point, distance: projected.distance,
           label: `${path.name} • segment`, targetId: path.id, segmentIndex: i,
