@@ -264,9 +264,17 @@ export function selectReferenceFloor(
  * original world coordinates.
  *
  * RMF:
- * the SAME physical points converted
- * through building.yaml's
- * worldToReferenceImage().
+ * the SAME physical points converted to RMF metres.
+ *
+ * We first use building.yaml's worldToReferenceImage()
+ * so the physical point is aligned with the exported
+ * reference_image geometry, then convert pixels to metres:
+ *
+ *   rmf_x_m = reference_x_px * resolution
+ *   rmf_y_m = -reference_y_px * resolution
+ *
+ * This matches Traffic Editor's x(m) / y(m) convention,
+ * not its x(pixels) / y(pixels) display.
  */
 export function generateReferenceCoordinates(
   metadata: MapMetadata,
@@ -288,13 +296,42 @@ export function generateReferenceCoordinates(
     );
   }
 
-  const rmf =
-    robot.map(point =>
-      worldToReferenceImage(
-        point,
-        metadata,
-      ),
+  const resolution =
+    Math.max(
+      Number.isFinite(metadata.resolution)
+        ? metadata.resolution
+        : 0.05,
+      EPS,
     );
+
+  const rmf =
+    robot.map(point => {
+      // building.yaml uses reference_image coordinates in pixels.
+      // Reference coordinates for RMF integration must be metres,
+      // matching Traffic Editor's x(m) / y(m) values.
+      //
+      // reference-image convention:
+      //   +X = right
+      //   +Y = down
+      //
+      // RMF metre convention:
+      //   +X = right
+      //   +Y = up
+      //
+      // Therefore:
+      //   rmf_x_m = reference_x_px * resolution
+      //   rmf_y_m = -reference_y_px * resolution
+      const reference =
+        worldToReferenceImage(
+          point,
+          metadata,
+        );
+
+      return {
+        x: reference.x * resolution,
+        y: -reference.y * resolution,
+      };
+    });
 
   if (rmf.length !== 4) {
     throw new Error(
