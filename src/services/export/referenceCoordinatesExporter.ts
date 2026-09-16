@@ -215,25 +215,34 @@ export function generateReferenceCoordinatesYaml(
   const reference =
     generateReferenceCoordinates(metadata, building);
 
-  return YAML.stringify(
-    {
-      reference_coordinates: {
-        [reference.mapName]: {
-          rmf: reference.rmf.map(point => [
-            point.x,
-            point.y,
-          ]),
-          robot: reference.robot.map(point => [
-            point.x,
-            point.y,
-          ]),
-        },
-      },
-    },
-    {
-      lineWidth: 0,
-    },
-  );
+  const formatNumber = (value: number): string => {
+    // Preserve meaningful precision while avoiding scientific notation for normal map values.
+    if (!Number.isFinite(value)) {
+      throw new Error('Reference coordinate contains a non-finite number.');
+    }
+
+    const rounded = Number(value.toFixed(12));
+    return String(rounded);
+  };
+
+  const formatPair = (point: Point2D): string =>
+    `[${formatNumber(point.x)}, ${formatNumber(point.y)}]`;
+
+  const lines: string[] = [
+    'reference_coordinates:',
+    `  ${reference.mapName}:`,
+    '    rmf:',
+    ...reference.rmf.map(
+      point => `      - ${formatPair(point)}`,
+    ),
+    '    robot:',
+    ...reference.robot.map(
+      point => `      - ${formatPair(point)}`,
+    ),
+    '',
+  ];
+
+  return lines.join('\n');
 }
 
 export function downloadReferenceCoordinatesYaml(
