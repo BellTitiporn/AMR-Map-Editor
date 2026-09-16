@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import type {
   BuildingData,
+  BuildingLevelConfig,
   MapImageData,
   MapMetadata,
   MapZone,
@@ -8,35 +9,50 @@ import type {
   NavigationPath,
   RobotConfig,
 } from '../../models';
-import { downloadBlob, exportBaseName } from '../../utils/files';
 import { generateBuildingYaml } from './buildingExporter';
-import { navigationPayload } from './navigationExporters';
+import { generateReferenceCoordinatesYaml } from './referenceCoordinatesExporter';
+import { exportBaseName, downloadBlob } from '../../utils/files';
 
-async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-  const response = await fetch(dataUrl);
+function navigationPayload(
+  metadata: MapMetadata,
+  objects: NavigationObject[],
+  paths: NavigationPath[],
+  zones: MapZone[],
+  robots: RobotConfig[],
+) {
+  return {
+    map: {
+      id: metadata.id,
+      name: metadata.name,
+      width: metadata.width,
+      height: metadata.height,
+      resolution: metadata.resolution,
+      origin: [
+        metadata.originX,
+        metadata.originY,
+        metadata.originYaw,
+      ],
+    },
+    objects: objects.map(object => ({
+      ...object,
+      headingDegrees: object.yaw * 180 / Math.PI,
+    })),
+    paths,
+    zones,
+    robots,
+  };
+}
+
+async function occupancyPngBlob(
+  image: MapImageData,
+): Promise<Blob> {
+  const response = await fetch(image.dataUrl);
   if (!response.ok) {
-    throw new Error('Unable to read occupancy image for RMF bundle export.');
+    throw new Error('Failed to read occupancy image for RMF Bundle export.');
   }
   return response.blob();
 }
 
-export interface RmfBundlePayloadOptions {
-  baseName?: string;
-}
-
-/**
- * Export a portable RMF handoff bundle.
- *
- * Traffic Editor consumes:
- *   - <base>.building.yaml
- *   - <base>.png
- *
- * Robot/Fleet integrations consume:
- *   - <base>-navigation.json
- *
- * The building file keeps `amr_yaw` as a custom vertex parameter, while the
- * companion navigation JSON stores x/y/yaw explicitly in the ROS `map` frame.
- */
 export async function exportRmfBundle(
   metadata: MapMetadata,
   image: MapImageData,
@@ -44,17 +60,10 @@ export async function exportRmfBundle(
   paths: NavigationPath[],
   zones: MapZone[],
   building: BuildingData,
-  robotConfigs: RobotConfig[] = [],
+  robots: RobotConfig[],
   fileName = 'map',
-) {
-  if (!image?.dataUrl) {
-    throw new Error('RMF Bundle export requires an occupancy map image.');
-  }
-
-  if (!(metadata.resolution > 0) || metadata.width <= 0 || metadata.height <= 0) {
-    throw new Error('RMF Bundle export requires valid map resolution and dimensions.');
-  }
-
+  referenceConfig?: BuildingLevelConfig,
+): Promise<void> {
   const base = exportBaseName(fileName, 'map');
   const zip = new JSZip();
 
@@ -64,55 +73,88 @@ export async function exportRmfBundle(
     paths,
     building,
     {
-      buildingName: building.config.buildingName || metadata.name || base,
-      levelName: building.config.levelName || 'L1',
+      buildingName:
+        building.config.buildingName ||
+        metadata.name ||
+        base,
+      levelName:
+        building.config.levelName ||
+        'L1',
       referenceLevelName:
-        building.config.referenceLevelName || building.config.levelName || 'L1',
-      elevation: building.config.elevation,
+        building.config.referenceLevelName ||
+        building.config.levelName ||
+        'L1',
+      elevation:
+        building.config.elevation,
       drawingFilename: `${base}.png`,
+      navmeshFilename: `${base}_navmesh.nav`,
     },
   );
 
-  const nav = navigationPayload(
-    metadata,
-    objects,
-    paths,
-    zones,
-    robotConfigs,
+  const navigationJson = JSON.stringify(
+    navigationPayload(
+      metadata,
+      objects,
+      paths,
+      zones,
+      robots,
+    ),
+    null,
+    2,
   );
 
-  zip.file(`${base}.building.yaml`, buildingYaml);
-  zip.file(`${base}.png`, await dataUrlToBlob(image.dataUrl));
+  const referenceYaml =
+    generateReferenceCoordinatesYaml(
+      referenceConfig ?? building.config,
+    );
+
+  zip.file(
+    `${base}.building.yaml`,
+    buildingYaml,
+  );
+
+  zip.file(
+    `${base}.png`,
+    await occupancyPngBlob(image),
+  );
+
   zip.file(
     `${base}-navigation.json`,
-    JSON.stringify(nav, null, 2),
+    navigationJson,
+  );
+
+  zip.file(
+    `${base}-reference-coordinates.yaml`,
+    referenceYaml,
   );
 
   zip.file(
     'README.txt',
     [
-      'AMR Map Editor — RMF Export Bundle',
+      'AMR Map Editor - RMF Bundle',
       '',
-      'Files:',
-      `- ${base}.building.yaml : Open-RMF / Traffic Editor building map`,
-      `- ${base}.png : background/reference occupancy image`,
-      `- ${base}-navigation.json : AMR navigation data in ROS map coordinates`,
+      `${base}.building.yaml`,
+      '  Open-RMF / Traffic Editor building map.',
       '',
-      'Important:',
-      '- Traffic Editor does not render the custom amr_yaw property as a heading arrow.',
-      '- Heading/orientation is preserved in the navigation JSON as waypoint.yaw (radians).',
-      '- building.yaml uses reference_image coordinates so geometry aligns with the PNG.',
-      '- Keep building.yaml and PNG in the same folder when opening in Traffic Editor.',
+      `${base}.png`,
+      '  Occupancy/reference image used by the building map.',
       '',
-      'Waypoint yaw convention:',
-      '0 rad = +X / East',
-      '+pi/2 = +Y / North',
-      'pi = West',
-      '-pi/2 = South',
+      `${base}-navigation.json`,
+      '  AMR navigation objects, paths, zones, robot config, yaw and headingDegrees.',
+      '',
+      `${base}-reference-coordinates.yaml`,
+      '  RMF <-> Robot coordinate correspondence points.',
+      '  Pairing is positional: rmf[0] <-> robot[0], rmf[1] <-> robot[1], etc.',
       '',
     ].join('\n'),
   );
 
-  const blob = await zip.generateAsync({ type: 'blob' });
-  downloadBlob(blob, `${base}-rmf-bundle.zip`);
+  const blob = await zip.generateAsync({
+    type: 'blob',
+  });
+
+  downloadBlob(
+    blob,
+    `${base}-rmf-bundle.zip`,
+  );
 }

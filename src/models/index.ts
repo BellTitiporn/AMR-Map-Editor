@@ -1,6 +1,11 @@
 export type Tool = 'select'|'pan'|'brush'|'eraser'|'path'|'zone'|'measure'|'building';
 export type LayerKey = 'occupancy'|'grid'|'building'|'paths'|'waypoints'|'stations'|'zones'|'robot'|'validation'|'labels';
 export interface Point2D{x:number;y:number}
+export interface ReferenceCoordinatePair { rmf:Point2D; robot:Point2D; }
+export interface ReferenceCoordinatesConfig {
+  mapName:string;
+  points:ReferenceCoordinatePair[];
+}
 export type PathOrientation = '' | 'forward' | 'backward';
 export interface MapMetadata { id:string; name:string; width:number; height:number; resolution:number; originX:number; originY:number; originYaw:number; }
 export interface MapImageData{dataUrl:string;originalDataUrl?:string;mimeType:string;originalFilename:string;sourceFormat:'pgm'|'png'|'jpg'|'jpeg';originalBase64?:string;occupancyBase64?:string;negate:0|1;occupiedThresh:number;freeThresh:number}
@@ -50,7 +55,11 @@ export interface BuildingMeasurement {
   id:string; name:string; start:Point2D; end:Point2D; distance:number; enabled:boolean;
 }
 export interface BuildingLevelConfig {
-  buildingName:string; referenceLevelName:string; levelName:string; elevation:number;
+  buildingName:string;
+  referenceLevelName:string;
+  levelName:string;
+  elevation:number;
+  referenceCoordinates?:ReferenceCoordinatesConfig;
 }
 export interface BuildingData {
   config:BuildingLevelConfig;
@@ -62,7 +71,16 @@ export interface BuildingData {
 }
 
 export const defaultBuildingData = (mapName='AMR_Map'):BuildingData=>({
-  config:{buildingName:mapName||'AMR_Map',referenceLevelName:'L1',levelName:'L1',elevation:0},
+  config:{
+    buildingName:mapName||'AMR_Map',
+    referenceLevelName:'L1',
+    levelName:'L1',
+    elevation:0,
+    referenceCoordinates:{
+      mapName:mapName||'',
+      points:[],
+    },
+  },
   walls:[],doors:[],floors:[],models:[],measurements:[]
 });
 

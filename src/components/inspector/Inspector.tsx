@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeftRight, ArrowRight, CircleCheck, GitMerge, Link2, Copy, RotateCcw, Trash2 } from 'lucide-react';
 import { useEditorStore } from '../../state/editorStore';
 import { useProjectStore } from '../../state/projectStore';
-import type { BuildingDoorType, BuildingWall, NavigationObject, NavigationPath, PathType, ZoneType } from '../../models';
+import type { BuildingDoorType, BuildingWall, NavigationObject, NavigationPath, PathType, ReferenceCoordinatesConfig, ZoneType } from '../../models';
 import { degreesToRadians, headingLabel, normalizeAngle, normalizeDegrees, radiansToDegrees } from '../../geometry/angles';
 import { connectPathEndpoint, DEFAULT_PATH_SNAP_DISTANCE_M, endpointConnectionStatus, findNearestMergeCandidate, mergeWithNearestPath } from '../../geometry/pathTopology';
 import { resizeWall, wallAngleDegrees, wallLength, type WallResizeAnchor } from '../../geometry/wall';
@@ -465,7 +465,187 @@ function SelectField({ l, v, options, on, begin }: { l: string; v: string; optio
 }
 
 
-function BuildingConfig(){const p=useProjectStore();const b=p.building.config;const begin=()=>p.commit();return <div className="robotcfg"><div className="group-title">RMF BUILDING / LEVEL</div><Field l="Building Name" v={b.buildingName} begin={begin} on={v=>p.updateBuildingConfig({buildingName:v})}/><div className="twocol"><Field l="Level" v={b.levelName} begin={begin} on={v=>p.updateBuildingConfig({levelName:v})}/><Field l="Reference Level" v={b.referenceLevelName} begin={begin} on={v=>p.updateBuildingConfig({referenceLevelName:v})}/></div><NumberField l="Elevation (m)" v={b.elevation} begin={begin} on={v=>p.updateBuildingConfig({elevation:v})}/><div className="robotnote">Used by RMF .building.yaml export.</div></div>}
+function BuildingConfig() {
+  const p = useProjectStore();
+  const b = p.building.config;
+  const begin = () => p.commit();
+
+  const fallbackReference: ReferenceCoordinatesConfig = {
+    mapName: b.buildingName || p.metadata.name || '',
+    points: [],
+  };
+
+  const reference = b.referenceCoordinates ?? fallbackReference;
+
+  const updateReference = (next: ReferenceCoordinatesConfig) => {
+    p.updateBuildingConfig({ referenceCoordinates: next });
+  };
+
+  const updateReferencePoint = (
+    index: number,
+    side: 'rmf' | 'robot',
+    axis: 'x' | 'y',
+    value: number,
+  ) => {
+    const points = reference.points.map((pair, i) =>
+      i === index
+        ? {
+            ...pair,
+            [side]: {
+              ...pair[side],
+              [axis]: value,
+            },
+          }
+        : pair,
+    );
+
+    updateReference({
+      ...reference,
+      points,
+    });
+  };
+
+  const addReferencePoint = () => {
+    updateReference({
+      ...reference,
+      points: [
+        ...reference.points,
+        {
+          rmf: { x: 0, y: 0 },
+          robot: { x: 0, y: 0 },
+        },
+      ],
+    });
+  };
+
+  const removeReferencePoint = (index: number) => {
+    if (reference.points.length <= 2) return;
+    updateReference({
+      ...reference,
+      points: reference.points.filter((_, i) => i !== index),
+    });
+  };
+
+  return <div className="robotcfg">
+    <div className="group-title">RMF BUILDING / LEVEL</div>
+
+    <Field
+      l="Building Name"
+      v={b.buildingName}
+      begin={begin}
+      on={v => p.updateBuildingConfig({ buildingName: v })}
+    />
+
+    <div className="twocol">
+      <Field
+        l="Level"
+        v={b.levelName}
+        begin={begin}
+        on={v => p.updateBuildingConfig({ levelName: v })}
+      />
+      <Field
+        l="Reference Level"
+        v={b.referenceLevelName}
+        begin={begin}
+        on={v => p.updateBuildingConfig({ referenceLevelName: v })}
+      />
+    </div>
+
+    <NumberField
+      l="Elevation (m)"
+      v={b.elevation}
+      begin={begin}
+      on={v => p.updateBuildingConfig({ elevation: v })}
+    />
+
+    <div className="robotnote">Used by RMF .building.yaml export.</div>
+
+    <div className="path-direction-card">
+      <div className="path-direction-head">
+        <div>
+          <span className="group-title">REFERENCE COORDINATES</span>
+          <small>RMF ↔ Robot coordinate calibration</small>
+        </div>
+      </div>
+
+      <Field
+        l="Map Name"
+        v={reference.mapName}
+        begin={begin}
+        on={v => updateReference({ ...reference, mapName: v })}
+      />
+
+      {reference.points.map((pair, index) => <div className="path-point-card" key={`ref-${index}`}>
+        <div className="path-point-head">
+          <div>
+            <span className="group-title">POINT {index + 1}</span>
+            <small>RMF point ↔ Robot point</small>
+          </div>
+          {reference.points.length > 2 && <button
+            type="button"
+            className="delete-path-point"
+            onClick={() => {
+              begin();
+              removeReferencePoint(index);
+            }}
+          >
+            Remove
+          </button>}
+        </div>
+
+        <div className="group-title">RMF</div>
+        <div className="twocol">
+          <NumberField
+            l="X"
+            v={pair.rmf.x}
+            step={0.01}
+            begin={begin}
+            on={v => updateReferencePoint(index, 'rmf', 'x', v)}
+          />
+          <NumberField
+            l="Y"
+            v={pair.rmf.y}
+            step={0.01}
+            begin={begin}
+            on={v => updateReferencePoint(index, 'rmf', 'y', v)}
+          />
+        </div>
+
+        <div className="group-title">ROBOT</div>
+        <div className="twocol">
+          <NumberField
+            l="X"
+            v={pair.robot.x}
+            step={0.01}
+            begin={begin}
+            on={v => updateReferencePoint(index, 'robot', 'x', v)}
+          />
+          <NumberField
+            l="Y"
+            v={pair.robot.y}
+            step={0.01}
+            begin={begin}
+            on={v => updateReferencePoint(index, 'robot', 'y', v)}
+          />
+        </div>
+      </div>)}
+
+      <button
+        type="button"
+        onClick={() => {
+          begin();
+          addReferencePoint();
+        }}
+      >
+        + Add Reference Point
+      </button>
+
+      <div className="path-direction-help">
+        Point order is preserved during export: rmf[0] ↔ robot[0], rmf[1] ↔ robot[1], etc.
+      </div>
+    </div>
+  </div>;
+}
 
 function RobotConfig() {
   const p = useProjectStore();
