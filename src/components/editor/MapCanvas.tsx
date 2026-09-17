@@ -632,6 +632,10 @@ function PathDirectionOverlay({ path, metadata, scale, showBadge }: { path: Navi
   // Purple arrows show the RMF lane orientation independently from travel direction.
   // forward  = robot faces from the first vertex toward the next vertex.
   // backward = robot faces opposite to the path vertex order.
+  //
+  // The badge is rendered above the path. Keep the orientation arrow on the
+  // opposite/lower side so the badge cannot cover it on horizontal segments.
+  // A white halo keeps the arrow visible over occupancy pixels and path lines.
   const orientationArrows = orientation ? path.points.slice(0, -1).map((q, i) => {
     const a = worldToPixel(q.x, q.y, metadata);
     const b = worldToPixel(path.points[i + 1].x, path.points[i + 1].y, metadata);
@@ -641,29 +645,43 @@ function PathDirectionOverlay({ path, metadata, scale, showBadge }: { path: Navi
     const nx = -uy, ny = ux;
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
 
-    // Offset the orientation arrow so it is still visible when travel-direction
-    // arrows are drawn on top of the same path.
-    const offset = 10 / scale;
-    const half = Math.min(20 / scale, len * .22);
+    // Prefer the screen-down side of the segment normal because the badge
+    // occupies the screen-up side of the path. Vertical segments simply use
+    // one side of the line.
+    const side = Math.abs(ny) > 1e-6 ? (ny >= 0 ? 1 : -1) : 1;
+    const offset = 14 / scale;
+    const half = Math.min(24 / scale, len * .24);
     const dir = orientation === 'backward' ? -1 : 1;
-    const cx = mx - nx * offset;
-    const cy = my - ny * offset;
+    const cx = mx + nx * offset * side;
+    const cy = my + ny * offset * side;
 
-    return <Arrow
-      key={`orientation-${orientation}-${i}`}
-      points={[
-        cx - ux * half * dir,
-        cy - uy * half * dir,
-        cx + ux * half * dir,
-        cy + uy * half * dir,
-      ]}
-      pointerLength={7 / scale}
-      pointerWidth={7 / scale}
-      stroke="#7c3aed"
-      fill="#7c3aed"
-      strokeWidth={2.2 / scale}
-      listening={false}
-    />;
+    const points = [
+      cx - ux * half * dir,
+      cy - uy * half * dir,
+      cx + ux * half * dir,
+      cy + uy * half * dir,
+    ];
+
+    return <Group key={`orientation-${orientation}-${i}`} listening={false}>
+      <Arrow
+        points={points}
+        pointerLength={10 / scale}
+        pointerWidth={10 / scale}
+        stroke="rgba(255,255,255,.96)"
+        fill="rgba(255,255,255,.96)"
+        strokeWidth={5 / scale}
+        listening={false}
+      />
+      <Arrow
+        points={points}
+        pointerLength={9 / scale}
+        pointerWidth={9 / scale}
+        stroke="#7c3aed"
+        fill="#7c3aed"
+        strokeWidth={2.8 / scale}
+        listening={false}
+      />
+    </Group>;
   }) : [];
 
   if (!showBadge || path.points.length < 2) return <>{arrows}{orientationArrows}</>;
@@ -683,7 +701,7 @@ function PathDirectionOverlay({ path, metadata, scale, showBadge }: { path: Navi
       <Rect width={width} height={16/scale} fill="rgba(255,255,255,.94)" stroke={stroke} strokeWidth={1/scale} cornerRadius={2/scale}/>
       <Text width={width} height={16/scale} align="center" verticalAlign="middle" text={text} fontSize={8.5/scale} fontStyle="bold" fill={stroke}/>
     </Group>}
-    {orientationText && <Group x={x-orientationWidth/2} y={y + (hasTravelDirection ? 19/scale : 0)} listening={false}>
+    {orientationText && <Group x={x-orientationWidth/2} y={y - (hasTravelDirection ? 19/scale : 0)} listening={false}>
       <Rect width={orientationWidth} height={16/scale} fill="rgba(255,255,255,.94)" stroke="#7c3aed" strokeWidth={1/scale} cornerRadius={2/scale}/>
       <Text width={orientationWidth} height={16/scale} align="center" verticalAlign="middle" text={orientationText} fontSize={8/scale} fontStyle="bold" fill="#6d28d9"/>
     </Group>}
