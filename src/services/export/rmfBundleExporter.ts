@@ -10,6 +10,7 @@ import type {
 } from '../../models';
 import { generateBuildingYaml } from './buildingExporter';
 import { generateReferenceCoordinatesYaml } from './referenceCoordinatesExporter';
+import { generateNavGraphYaml } from './navGraphExporter';
 import { exportBaseName, downloadBlob } from '../../utils/files';
 
 function navigationPayload(
@@ -130,6 +131,11 @@ export async function exportRmfBundle(
     navigationJson,
   );
 
+  zip.file(
+    'nav_graphs/0.yaml',
+    generateNavGraphYaml(metadata, objects, paths, building),
+  );
+
   if (referenceYaml) {
     zip.file(
       `${base}-reference-coordinates.yaml`,
@@ -150,6 +156,9 @@ export async function exportRmfBundle(
       '',
       `${base}-navigation.json`,
       '  AMR navigation objects, paths, zones, robot config, yaw and headingDegrees.',
+      '',
+      'nav_graphs/0.yaml',
+      '  RMF navigation graph generated directly from the same editor topology.',
       '',
       ...(referenceYaml
         ? [
