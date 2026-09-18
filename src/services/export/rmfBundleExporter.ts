@@ -9,43 +9,11 @@ import type {
   RobotConfig,
 } from '../../models';
 import { generateBuildingYaml } from './buildingExporter';
-import { generateReferenceCoordinatesYaml } from './referenceCoordinatesExporter';
 import { collectNavGraphIndices, generateNavGraphYaml } from './navGraphExporter';
+import { generatePgmBytes, generateRosYaml } from './rosExporter';
 import { exportBaseName, downloadBlob } from '../../utils/files';
 
-function navigationPayload(
-  metadata: MapMetadata,
-  objects: NavigationObject[],
-  paths: NavigationPath[],
-  zones: MapZone[],
-  robots: RobotConfig[],
-) {
-  return {
-    map: {
-      id: metadata.id,
-      name: metadata.name,
-      width: metadata.width,
-      height: metadata.height,
-      resolution: metadata.resolution,
-      origin: [
-        metadata.originX,
-        metadata.originY,
-        metadata.originYaw,
-      ],
-    },
-    objects: objects.map(object => ({
-      ...object,
-      headingDegrees: object.yaw * 180 / Math.PI,
-    })),
-    paths,
-    zones,
-    robots,
-  };
-}
-
-async function occupancyPngBlob(
-  image: MapImageData,
-): Promise<Blob> {
+async function occupancyPngBlob(image: MapImageData): Promise<Blob> {
   const response = await fetch(image.dataUrl);
   if (!response.ok) {
     throw new Error('Failed to read occupancy image for RMF Bundle export.');
@@ -53,18 +21,48 @@ async function occupancyPngBlob(
   return response.blob();
 }
 
+/**
+ * Export a deployment-focused RMF bundle.
+ *
+ * The ZIP intentionally contains ONLY:
+ *   map.building.yaml
+ *   map.png
+ *   map.pgm
+ *   map.yaml
+ *   nav_graphs/<graphIndex>.yaml
+ *
+ * The names inside the ZIP are always based on "map" so downstream launch
+ * files and deployment scripts can use stable filenames regardless of the
+ * filename chosen for the ZIP itself.
+ *
+ * zones/robots remain in the function signature for backward compatibility
+ * with the existing ExportDialog call, but are not written into this bundle.
+ */
 export async function exportRmfBundle(
   metadata: MapMetadata,
   image: MapImageData,
   objects: NavigationObject[],
   paths: NavigationPath[],
-  zones: MapZone[],
+  _zones: MapZone[],
   building: BuildingData,
-  robots: RobotConfig[],
+  _robots: RobotConfig[],
   fileName = 'map',
 ): Promise<void> {
   const base = exportBaseName(fileName, 'map');
   const zip = new JSZip();
+  const internalBase = 'map';
+
+  if (!image.dataUrl) {
+    throw new Error('RMF Bundle export requires a valid occupancy map image.');
+  }
+  if (metadata.resolution <= 0 || metadata.width <= 0 || metadata.height <= 0) {
+    throw new Error('RMF Bundle export requires valid map dimensions and resolution.');
+  }
+
+  const graphIndices = collectNavGraphIndices(paths);
+  if (!graphIndices.length) {
+    throw new Error('RMF Bundle export requires at least one enabled path with 2 or more points for nav_graphs.');
+  }
 
   const buildingYaml = generateBuildingYaml(
     metadata,
@@ -75,7 +73,7 @@ export async function exportRmfBundle(
       buildingName:
         building.config.buildingName ||
         metadata.name ||
-        base,
+        internalBase,
       levelName:
         building.config.levelName ||
         'L1',
@@ -83,55 +81,20 @@ export async function exportRmfBundle(
         building.config.referenceLevelName ||
         building.config.levelName ||
         'L1',
-      elevation:
-        building.config.elevation,
-      drawingFilename: `${base}.png`,
-      navmeshFilename: `${base}_navmesh.nav`,
+      elevation: building.config.elevation,
+      drawingFilename: `${internalBase}.png`,
+      navmeshFilename: `${internalBase}_navmesh.nav`,
     },
   );
 
-  const navigationJson = JSON.stringify(
-    navigationPayload(
-      metadata,
-      objects,
-      paths,
-      zones,
-      robots,
-    ),
-    null,
-    2,
-  );
-
-  let referenceYaml: string | null = null;
-
-  try {
-    referenceYaml =
-      generateReferenceCoordinatesYaml(
-        metadata,
-        building,
-      );
-  } catch {
-    // RMF Bundle remains exportable when no valid Floor reference geometry exists.
-    // Standalone Reference Coordinates export will still show the validation error.
-    referenceYaml = null;
-  }
-
+  zip.file(`${internalBase}.building.yaml`, buildingYaml);
+  zip.file(`${internalBase}.png`, await occupancyPngBlob(image));
+  zip.file(`${internalBase}.pgm`, await generatePgmBytes(image, metadata));
   zip.file(
-    `${base}.building.yaml`,
-    buildingYaml,
+    `${internalBase}.yaml`,
+    generateRosYaml(metadata, image, `${internalBase}.pgm`),
   );
 
-  zip.file(
-    `${base}.png`,
-    await occupancyPngBlob(image),
-  );
-
-  zip.file(
-    `${base}-navigation.json`,
-    navigationJson,
-  );
-
-  const graphIndices = collectNavGraphIndices(paths);
   for (const graphIndex of graphIndices) {
     zip.file(
       `nav_graphs/${graphIndex}.yaml`,
@@ -139,51 +102,6 @@ export async function exportRmfBundle(
     );
   }
 
-  if (referenceYaml) {
-    zip.file(
-      `${base}-reference-coordinates.yaml`,
-      referenceYaml,
-    );
-  }
-
-  zip.file(
-    'README.txt',
-    [
-      'AMR Map Editor - RMF Bundle',
-      '',
-      `${base}.building.yaml`,
-      '  Open-RMF / Traffic Editor building map.',
-      '',
-      `${base}.png`,
-      '  Occupancy/reference image used by the building map.',
-      '',
-      `${base}-navigation.json`,
-      '  AMR navigation objects, paths, zones, robot config, yaw and headingDegrees.',
-      '',
-      `nav_graphs/${graphIndices.join('.yaml, nav_graphs/')}.yaml`,
-      `  RMF navigation graphs generated for Graph Index: ${graphIndices.join(', ')}.`,
-      '',
-      ...(referenceYaml
-        ? [
-            `${base}-reference-coordinates.yaml`,
-            '  Auto-generated from matching Floor polygon vertices.',
-            '  robot[i] = GeoJSON/world coordinate.',
-            '  rmf[i] = the same physical point converted for building.yaml.',
-            '',
-          ]
-        : [
-            'Reference coordinates were not included because no enabled Floor polygon with at least 3 vertices was available.',
-            '',
-          ]),
-    ].join('\n'),
-  );
-
-  const blob = await zip.generateAsync({
-    type: 'blob',
-  });
-
-  downloadBlob(
-    blob,
-    `${base}-rmf-bundle.zip`,
-  );
+  const blob = await zip.generateAsync({ type: 'blob' });
+  downloadBlob(blob, `${base}-rmf-bundle.zip`);
 }
