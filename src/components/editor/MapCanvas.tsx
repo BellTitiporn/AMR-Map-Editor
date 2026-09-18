@@ -132,7 +132,7 @@ export function MapCanvas() {
     if (drawing.kind === 'path' && drawing.points.length > 1) {
       p.commit();
       const id = 'P-' + crypto.randomUUID().slice(0, 8);
-      const created: NavigationPath = { id, name: 'New Path', type: e.pathType, points: drawing.points, width: 1, maxSpeed: 1, orientation: '', enabled: true };
+      const created: NavigationPath = { id, name: 'New Path', type: e.pathType, points: drawing.points, width: 1, maxSpeed: 1, graphIndex: 0, orientation: '', enabled: true };
       let nextPaths = [...p.paths, created];
       nextPaths = connectPathEndpoint(nextPaths, p.objects, id, 'start', DEFAULT_PATH_SNAP_DISTANCE_M).paths;
       nextPaths = connectPathEndpoint(nextPaths, p.objects, id, 'end', DEFAULT_PATH_SNAP_DISTANCE_M).paths;

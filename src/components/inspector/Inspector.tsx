@@ -149,6 +149,14 @@ export function Inspector() {
       </div>
 
       <SelectField l="Path Type" v={path.type} options={['normal', 'preferred', 'one_way', 'bidirectional', 'restricted']} begin={begin} on={v => p.updatePath(path.id, { type: v as PathType })} />
+      <NumberField
+        l="Graph Index"
+        v={path.graphIndex ?? 0}
+        step={1}
+        begin={begin}
+        on={v => p.updatePath(path.id, { graphIndex: Math.max(0, Math.trunc(v)) })}
+      />
+      <div className="heading-help">RMF nav graph file: nav_graphs/{Math.max(0, Math.trunc(path.graphIndex ?? 0))}.yaml</div>
       <NumberField l="Max Speed (m/s)" v={path.maxSpeed ?? 1} begin={begin} on={v => p.updatePath(path.id, { maxSpeed: v })} />
       <NumberField l="Path Width (m)" v={path.width ?? 1} begin={begin} on={v => p.updatePath(path.id, { width: v })} />
       <NumberField l="Safety Clearance (m)" v={path.safetyClearance ?? .2} begin={begin} on={v => p.updatePath(path.id, { safetyClearance: v })} />

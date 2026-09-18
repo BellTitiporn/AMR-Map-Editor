@@ -422,7 +422,7 @@ export function buildingPayload(
           bidirectional: [BOOL, path.type !== 'one_way'],
           demo_mock_floor_name: [STRING, ''],
           demo_mock_lift_name: [STRING, ''],
-          graph_idx: [INT, 0],
+          graph_idx: [INT, Math.max(0, Math.trunc((path as any).graphIndex ?? 0))],
           orientation: [STRING, normalizedOrientation],
           speed_limit: [DOUBLE, finite(path.maxSpeed, 0)],
         },

@@ -10,7 +10,7 @@ import type {
 } from '../../models';
 import { generateBuildingYaml } from './buildingExporter';
 import { generateReferenceCoordinatesYaml } from './referenceCoordinatesExporter';
-import { generateNavGraphYaml } from './navGraphExporter';
+import { collectNavGraphIndices, generateNavGraphYaml } from './navGraphExporter';
 import { exportBaseName, downloadBlob } from '../../utils/files';
 
 function navigationPayload(
@@ -131,10 +131,13 @@ export async function exportRmfBundle(
     navigationJson,
   );
 
-  zip.file(
-    'nav_graphs/0.yaml',
-    generateNavGraphYaml(metadata, objects, paths, building),
-  );
+  const graphIndices = collectNavGraphIndices(paths);
+  for (const graphIndex of graphIndices) {
+    zip.file(
+      `nav_graphs/${graphIndex}.yaml`,
+      generateNavGraphYaml(metadata, objects, paths, building, graphIndex),
+    );
+  }
 
   if (referenceYaml) {
     zip.file(
@@ -157,8 +160,8 @@ export async function exportRmfBundle(
       `${base}-navigation.json`,
       '  AMR navigation objects, paths, zones, robot config, yaw and headingDegrees.',
       '',
-      'nav_graphs/0.yaml',
-      '  RMF navigation graph generated directly from the same editor topology.',
+      `nav_graphs/${graphIndices.join('.yaml, nav_graphs/')}.yaml`,
+      `  RMF navigation graphs generated for Graph Index: ${graphIndices.join(', ')}.`,
       '',
       ...(referenceYaml
         ? [

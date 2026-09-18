@@ -17,6 +17,8 @@ export interface NavigationPath {
   safetyClearance?: number;
   priority?: number;
   robotTypes?: string[];
+  /** RMF navigation graph index. Paths with the same index are exported together to nav_graphs/<index>.yaml. */
+  graphIndex?: number;
   orientation?: PathOrientation;
   enabled: boolean;
 }

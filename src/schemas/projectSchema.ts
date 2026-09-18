@@ -13,6 +13,7 @@ const path=z.object({
   safetyClearance:z.number().optional(),
   priority:z.number().optional(),
   robotTypes:z.array(z.string()).optional(),
+  graphIndex:z.number().int().nonnegative().default(0),
   orientation:z.enum(['','forward','backward']).default(''),
   enabled:z.boolean()
 });

@@ -28,8 +28,8 @@ import { downloadBlob, downloadTextFile, exportBaseName } from '../../utils/file
  *       - -4.56
  *       - {amr_object_type: waypoint, name: WP-01}
  *
- * Current editor paths belong to graph_idx 0, therefore this file generates
- * nav_graphs/0.yaml.
+ * Each editor path has graphIndex (RMF graph_idx). Paths are grouped by
+ * graphIndex and exported to nav_graphs/<graphIndex>.yaml.
  */
 
 const MERGE_EPSILON_M = 0.02;
@@ -44,6 +44,19 @@ type MutableVertex = {
   point: Point2D;
   params: NavParams;
 };
+
+export function pathGraphIndex(path: NavigationPath): number {
+  const value = path.graphIndex ?? 0;
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+}
+
+export function collectNavGraphIndices(paths: NavigationPath[]): number[] {
+  return Array.from(new Set(
+    paths
+      .filter(path => path.enabled !== false && path.points.length >= 2)
+      .map(pathGraphIndex),
+  )).sort((a, b) => a - b);
+}
 
 function finite(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -159,6 +172,7 @@ export function generateNavGraphPayload(
   objects: NavigationObject[],
   paths: NavigationPath[],
   building: BuildingData,
+  graphIndex = 0,
 ): NavGraphPayload {
   const levelName = building.config.levelName || 'L1';
   const buildingName = building.config.buildingName || metadata.name || 'AMR_Map';
@@ -187,7 +201,7 @@ export function generateNavGraphPayload(
 
   const lanes: NavLane[] = [];
 
-  for (const path of paths.filter(p => p.enabled !== false && p.points.length >= 2)) {
+  for (const path of paths.filter(p => p.enabled !== false && p.points.length >= 2 && pathGraphIndex(p) === graphIndex)) {
     for (let i = 0; i < path.points.length - 1; i += 1) {
       const start = findOrAdd(path.points[i]);
       const end = findOrAdd(path.points[i + 1]);
@@ -273,12 +287,13 @@ export function generateNavGraphYaml(
   objects: NavigationObject[],
   paths: NavigationPath[],
   building: BuildingData,
+  graphIndex = 0,
 ): string {
-  if (!paths.some(path => path.enabled !== false && path.points.length >= 2)) {
-    throw new Error('Nav graph export requires at least one enabled path with 2 or more points.');
+  if (!paths.some(path => path.enabled !== false && path.points.length >= 2 && pathGraphIndex(path) === graphIndex)) {
+    throw new Error(`Nav graph ${graphIndex} export requires at least one enabled path with 2 or more points.`);
   }
 
-  const payload = generateNavGraphPayload(metadata, objects, paths, building);
+  const payload = generateNavGraphPayload(metadata, objects, paths, building, graphIndex);
 
   // Match rmf_building_map_tools / PyYAML output style exactly enough for
   // nav_graph files: sequence items stay in block style, while the parameter
@@ -328,10 +343,11 @@ export function downloadNavGraphYaml(
   objects: NavigationObject[],
   paths: NavigationPath[],
   building: BuildingData,
-  fileName = '0.yaml',
+  graphIndex = 0,
+  fileName = `${graphIndex}.yaml`,
 ): void {
   downloadTextFile(
-    generateNavGraphYaml(metadata, objects, paths, building),
+    generateNavGraphYaml(metadata, objects, paths, building, graphIndex),
     fileName,
     'application/yaml;charset=utf-8',
   );
@@ -346,23 +362,34 @@ export async function exportNavGraphsZip(
 ): Promise<void> {
   const base = exportBaseName(fileName, 'map');
   const zip = new JSZip();
+  const graphIndices = collectNavGraphIndices(paths);
 
-  zip.file(
-    'nav_graphs/0.yaml',
-    generateNavGraphYaml(metadata, objects, paths, building),
-  );
+  if (!graphIndices.length) {
+    throw new Error('Nav graph export requires at least one enabled path with 2 or more points.');
+  }
+
+  for (const graphIndex of graphIndices) {
+    zip.file(
+      `nav_graphs/${graphIndex}.yaml`,
+      generateNavGraphYaml(metadata, objects, paths, building, graphIndex),
+    );
+  }
 
   zip.file(
     'README.txt',
     [
       'AMR Map Editor - RMF Nav Graphs',
       '',
-      'nav_graphs/0.yaml',
-      '  RMF nav graph in building_map_generator-compatible YAML structure.',
+      `Generated graph indices: ${graphIndices.join(', ')}`,
       '',
-      'Current editor paths use graph_idx = 0, so only 0.yaml is generated.',
+      ...graphIndices.flatMap(index => [
+        `nav_graphs/${index}.yaml`,
+        `  RMF navigation graph generated from paths where Graph Index = ${index}.`,
+        '',
+      ]),
       'Bidirectional paths are emitted as two directed lane entries.',
       'RMF nav Y uses -reference_image_y * resolution.',
+      'Graph Index is also exported to .building.yaml as lane parameter graph_idx.',
     ].join('\n'),
   );
 
