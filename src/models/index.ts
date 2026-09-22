@@ -22,7 +22,7 @@ export interface NavigationPath {
   orientation?: PathOrientation;
   enabled: boolean;
 }
-export type ZoneType='no_go'|'slow'|'restricted'|'parking'|'loading'|'unloading'|'human_traffic'|'safety';
+export type ZoneType='no_go'|'keepout'|'slow'|'restricted'|'parking'|'loading'|'unloading'|'human_traffic'|'safety';
 export interface MapZone { id:string; name:string; type:ZoneType; polygon:Point2D[]; maxSpeed?:number; robotTypes?:string[]; enabled:boolean; metadata:Record<string,unknown>; }
 export interface RobotConfig { name:string; width:number; length:number; footprint:{type:'rectangle';width:number;length:number}|{type:'circle';radius:number}|{type:'polygon';points:Point2D[]}; safetyMargin:number; inflationRadius:number; minimumClearance:number; minimumTurningRadius:number; maxSpeed:number; }
 export interface ValidationIssue { id:string; severity:'error'|'warning'|'info'; type:string; message:string; objectId?:string; position?:Point2D; suggestedFix?:string; }

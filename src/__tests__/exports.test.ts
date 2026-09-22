@@ -36,3 +36,14 @@ it('generates ROS YAML from metadata', () => {
   expect(text).toContain('resolution: 0.025');
   expect(text).toContain('- -1');
 });
+
+import { generateKeepoutYaml } from '../services/export/keepoutExporter';
+
+it('generates keepout YAML with map_keepout.png', () => {
+  const text = generateKeepoutYaml(
+    { id: 'm', name: 'm', width: 100, height: 80, resolution: 0.05, originX: -2, originY: -3, originYaw: 0 },
+  );
+  expect(text).toContain('image: map_keepout.png');
+  expect(text).toContain('resolution: 0.05');
+  expect(text).toContain('occupied_thresh: 0.65');
+});

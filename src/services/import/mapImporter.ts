@@ -1,3 +1,4 @@
+import { createUuid } from '../../utils/uuid';
 import type { MapImageData, MapMetadata } from '../../models';
 import {
   getFileExtension,
@@ -188,7 +189,7 @@ export async function importMapFiles(
   const name = imageFile.name.replace(/\.[^.]+$/, '');
 
   const metadata: MapMetadata = {
-    id: crypto.randomUUID(),
+    id: createUuid(),
     name,
     width,
     height,

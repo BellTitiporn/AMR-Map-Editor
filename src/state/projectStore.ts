@@ -1,3 +1,4 @@
+import { createUuid } from '../utils/uuid';
 import { create } from 'zustand';
 import type { AMRMapProjectFile,BuildingData,BuildingDoor,BuildingFloor,BuildingMeasurement,BuildingModel,BuildingWall,MapImageData,MapMetadata,MapZone,NavigationObject,NavigationPath,RobotConfig,ValidationIssue } from '../models';
 import { defaultBuildingData } from '../models';
@@ -19,7 +20,7 @@ interface ProjectState{projectId:string;name:string;createdAt:string;revision:nu
  validate:()=>ValidationIssue[];toProjectFile:()=>AMRMapProjectFile;saveLocal:()=>Promise<void>;loadProject:(f:AMRMapProjectFile)=>void;replaceMap:(metadata:MapMetadata,image:MapImageData,clearObjects:boolean)=>void;updateMapImage:(image:MapImageData)=>void;newProject:()=>void;markDirty:()=>void;}
 const clone=<T,>(x:T):T=>structuredClone(x);
 const snap=(s:ProjectState):Snapshot=>({metadata:clone(s.metadata),image:clone(s.image),name:s.name,objects:clone(s.objects),paths:clone(s.paths),zones:clone(s.zones),robot:clone(s.robot),building:clone(s.building)});
-const initialId=crypto.randomUUID(),initialDate=new Date().toISOString();
+const initialId=createUuid(),initialDate=new Date().toISOString();
 
 export const useProjectStore=create<ProjectState>((set,get)=>({projectId:initialId,name:'Factory A / Floor 1',createdAt:initialDate,revision:1,metadata:seedMetadata,image:null,objects:seedObjects,paths:seedPaths,zones:seedZones,robot:seedRobot,building:seedBuilding,issues:[],dirty:true,saveState:'unsaved',undo:[],redo:[],
  commit:()=>set(s=>({undo:[...s.undo.slice(-79),snap(s)],redo:[]})),
@@ -82,5 +83,5 @@ export const useProjectStore=create<ProjectState>((set,get)=>({projectId:initial
    redo:[]
  }),
  replaceMap:(metadata,image,clear)=>set(s=>({metadata,image,name:metadata.name,objects:clear?[]:s.objects,paths:clear?[]:s.paths,zones:clear?[]:s.zones,building:clear?defaultBuildingData(metadata.name):{...s.building,config:{...s.building.config,buildingName:metadata.name}},issues:[],dirty:true,saveState:'unsaved',undo:[],redo:[]})),updateMapImage:image=>set({image,dirty:true,saveState:'unsaved'}),
- newProject:()=>{const id=crypto.randomUUID(),now=new Date().toISOString();set({projectId:id,name:'Untitled Map',createdAt:now,revision:1,metadata:{id,name:'Untitled Map',width:850,height:620,resolution:.05,originX:0,originY:0,originYaw:0},image:null,objects:[],paths:[],zones:[],robot:clone(seedRobot),building:defaultBuildingData('Untitled Map'),issues:[],dirty:false,saveState:'saved',undo:[],redo:[]})}
+ newProject:()=>{const id=createUuid(),now=new Date().toISOString();set({projectId:id,name:'Untitled Map',createdAt:now,revision:1,metadata:{id,name:'Untitled Map',width:850,height:620,resolution:.05,originX:0,originY:0,originYaw:0},image:null,objects:[],paths:[],zones:[],robot:clone(seedRobot),building:defaultBuildingData('Untitled Map'),issues:[],dirty:false,saveState:'saved',undo:[],redo:[]})}
 }));

@@ -12,6 +12,7 @@ import { generateBuildingYaml } from './buildingExporter';
 import { collectNavGraphIndices, generateNavGraphYaml } from './navGraphExporter';
 import { generatePgmBytes, generateRosYaml } from './rosExporter';
 import { exportBaseName, downloadBlob } from '../../utils/files';
+import { generateKeepoutPngBlob, generateKeepoutYaml } from './keepoutExporter';
 
 async function occupancyPngBlob(image: MapImageData): Promise<Blob> {
   const response = await fetch(image.dataUrl);
@@ -28,6 +29,8 @@ async function occupancyPngBlob(image: MapImageData): Promise<Blob> {
  *   map.png
  *   map.pgm
  *   map.yaml
+ *   map_keepout.png
+ *   map_keepout.yaml
  *   nav_graphs/<graphIndex>.yaml
  */
 export async function generateRmfBundleBlob(
@@ -35,7 +38,7 @@ export async function generateRmfBundleBlob(
   image: MapImageData,
   objects: NavigationObject[],
   paths: NavigationPath[],
-  _zones: MapZone[],
+  zones: MapZone[],
   building: BuildingData,
   _robots: RobotConfig[],
 ): Promise<Blob> {
@@ -65,6 +68,8 @@ export async function generateRmfBundleBlob(
   zip.file(`${internalBase}.png`, await occupancyPngBlob(image));
   zip.file(`${internalBase}.pgm`, await generatePgmBytes(image, metadata));
   zip.file(`${internalBase}.yaml`, generateRosYaml(metadata, image, `${internalBase}.pgm`));
+  zip.file('map_keepout.png', await generateKeepoutPngBlob(metadata, zones));
+  zip.file('map_keepout.yaml', generateKeepoutYaml(metadata, 'map_keepout.png'));
 
   for (const graphIndex of graphIndices) {
     zip.file(

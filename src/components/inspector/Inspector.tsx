@@ -1,3 +1,4 @@
+import { createUuid } from '../../utils/uuid';
 import { useEffect, useState } from 'react';
 import { ArrowLeftRight, ArrowRight, CircleCheck, GitMerge, Link2, Copy, RotateCcw, Trash2 } from 'lucide-react';
 import { useEditorStore } from '../../state/editorStore';
@@ -175,7 +176,7 @@ export function Inspector() {
     return <aside className="inspector">
       <div className="inspector-title">ZONE PROPERTIES</div>
       <Field l="Name" v={zone.name} begin={begin} on={v => p.updateZone(zone.id, { name: v })} />
-      <SelectField l="Type" v={zone.type} options={['no_go', 'slow', 'restricted', 'parking', 'loading', 'unloading', 'human_traffic', 'safety']} begin={begin} on={v => p.updateZone(zone.id, { type: v as ZoneType })} />
+      <SelectField l="Type" v={zone.type} options={['no_go', 'keepout', 'slow', 'restricted', 'parking', 'loading', 'unloading', 'human_traffic', 'safety']} begin={begin} on={v => p.updateZone(zone.id, { type: v as ZoneType })} />
       <NumberField l="Max Speed (m/s)" v={zone.maxSpeed ?? 0} begin={begin} on={v => p.updateZone(zone.id, { maxSpeed: v })} />
       <div className="kv"><span>Vertices</span><b>{zone.polygon.length}</b></div>
       <div className="actions">
@@ -230,14 +231,14 @@ export function Inspector() {
 
   function duplicateObject(value: NavigationObject) {
     p.commit();
-    const copy = { ...structuredClone(value), id: value.id + '-' + crypto.randomUUID().slice(0, 4), name: value.name + ' Copy', x: value.x + .5, y: value.y + .5 };
+    const copy = { ...structuredClone(value), id: value.id + '-' + createUuid().slice(0, 4), name: value.name + ' Copy', x: value.x + .5, y: value.y + .5 };
     p.addObject(copy);
     setSelection([copy.id]);
   }
 
   function duplicateZone(value: NonNullable<typeof zone>) {
     p.commit();
-    const copy = { ...structuredClone(value), id: value.id + '-' + crypto.randomUUID().slice(0, 4), name: value.name + ' Copy', polygon: value.polygon.map(q => ({ x: q.x + .5, y: q.y + .5 })) };
+    const copy = { ...structuredClone(value), id: value.id + '-' + createUuid().slice(0, 4), name: value.name + ' Copy', polygon: value.polygon.map(q => ({ x: q.x + .5, y: q.y + .5 })) };
     p.addZone(copy);
     setSelection([copy.id]);
   }

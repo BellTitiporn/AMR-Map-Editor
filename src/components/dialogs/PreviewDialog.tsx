@@ -7,7 +7,7 @@ import { headingLabel, radiansToDegrees } from '../../geometry/angles';
 import type { MapMetadata, NavigationPath } from '../../models';
 
 const zoneFill: Record<string, string> = {
-  no_go: 'rgba(239,68,68,.28)', slow: 'rgba(245,158,11,.25)', restricted: 'rgba(168,85,247,.25)',
+  no_go: 'rgba(239,68,68,.28)', keepout: 'rgba(127,29,29,.34)', slow: 'rgba(245,158,11,.25)', restricted: 'rgba(168,85,247,.25)',
   parking: 'rgba(59,130,246,.22)', loading: 'rgba(14,165,233,.22)', unloading: 'rgba(6,182,212,.22)',
   human_traffic: 'rgba(250,204,21,.22)', safety: 'rgba(34,197,94,.22)'
 };

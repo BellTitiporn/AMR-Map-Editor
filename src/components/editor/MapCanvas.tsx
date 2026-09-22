@@ -1,3 +1,4 @@
+import { createUuid } from '../../utils/uuid';
 import { useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Rect, Line, Circle, Text, Arrow, Group, Image as KonvaImage } from 'react-konva';
 import { useEditorStore } from '../../state/editorStore';
@@ -14,7 +15,7 @@ import { paintOccupancy, paintOccupancyShape } from '../../services/mapEditing/o
 import type { MapMetadata, NavigationPath, Point2D } from '../../models';
 
 const zoneFill: Record<string, string> = {
-  no_go:'rgba(239,68,68,.22)', slow:'rgba(245,158,11,.20)', restricted:'rgba(168,85,247,.20)', parking:'rgba(59,130,246,.18)',
+  no_go:'rgba(239,68,68,.22)', keepout:'rgba(127,29,29,.30)', slow:'rgba(245,158,11,.20)', restricted:'rgba(168,85,247,.20)', parking:'rgba(59,130,246,.18)',
   loading:'rgba(14,165,233,.18)', unloading:'rgba(6,182,212,.18)', human_traffic:'rgba(250,204,21,.18)', safety:'rgba(34,197,94,.18)'
 };
 type Point = { x: number; y: number };
@@ -131,7 +132,7 @@ export function MapCanvas() {
     if (!drawing) return;
     if (drawing.kind === 'path' && drawing.points.length > 1) {
       p.commit();
-      const id = 'P-' + crypto.randomUUID().slice(0, 8);
+      const id = 'P-' + createUuid().slice(0, 8);
       const created: NavigationPath = { id, name: 'New Path', type: e.pathType, points: drawing.points, width: 1, maxSpeed: 1, graphIndex: 0, orientation: '', enabled: true };
       let nextPaths = [...p.paths, created];
       nextPaths = connectPathEndpoint(nextPaths, p.objects, id, 'start', DEFAULT_PATH_SNAP_DISTANCE_M).paths;
@@ -140,7 +141,7 @@ export function MapCanvas() {
       e.setSelection([id]);
     } else if (drawing.kind === 'zone' && drawing.points.length > 2) {
       p.commit();
-      const id = 'Z-' + crypto.randomUUID().slice(0, 8);
+      const id = 'Z-' + createUuid().slice(0, 8);
       p.addZone({ id, name: 'New Zone', type: e.zoneType, polygon: drawing.points, enabled: true, metadata: {} });
       e.setSelection([id]);
     }
@@ -168,13 +169,13 @@ export function MapCanvas() {
       const o = p.objects.find(q => q.id === id), path = p.paths.find(q => q.id === id), zone = p.zones.find(q => q.id === id);
       p.commit();
       if (o) {
-        const c = {...structuredClone(o), id:o.id+'-'+crypto.randomUUID().slice(0,4), name:o.name+' Copy', x:o.x+.5, y:o.y+.5};
+        const c = {...structuredClone(o), id:o.id+'-'+createUuid().slice(0,4), name:o.name+' Copy', x:o.x+.5, y:o.y+.5};
         p.addObject(c); e.setSelection([c.id]);
       } else if (path) {
-        const c = {...structuredClone(path), id:path.id+'-'+crypto.randomUUID().slice(0,4), name:path.name+' Copy', points:path.points.map(q=>({x:q.x+.5,y:q.y+.5}))};
+        const c = {...structuredClone(path), id:path.id+'-'+createUuid().slice(0,4), name:path.name+' Copy', points:path.points.map(q=>({x:q.x+.5,y:q.y+.5}))};
         p.addPath(c); e.setSelection([c.id]);
       } else if (zone) {
-        const c = {...structuredClone(zone), id:zone.id+'-'+crypto.randomUUID().slice(0,4), name:zone.name+' Copy', polygon:zone.polygon.map(q=>({x:q.x+.5,y:q.y+.5}))};
+        const c = {...structuredClone(zone), id:zone.id+'-'+createUuid().slice(0,4), name:zone.name+' Copy', polygon:zone.polygon.map(q=>({x:q.x+.5,y:q.y+.5}))};
         p.addZone(c); e.setSelection([c.id]);
       }
     };
@@ -190,9 +191,9 @@ export function MapCanvas() {
         clipboard.current=o?{kind:'object',value:structuredClone(o)}:pa?{kind:'path',value:structuredClone(pa)}:z?{kind:'zone',value:structuredClone(z)}:null;
       } else if (m && keyName === 'v' && clipboard.current) {
         x.preventDefault(); const c=clipboard.current; p.commit();
-        if (c.kind==='object') { const o=structuredClone(c.value) as typeof p.objects[number]; o.id=o.id+'-'+crypto.randomUUID().slice(0,4);o.name+=' Copy';o.x+=.5;o.y+=.5;p.addObject(o);e.setSelection([o.id]); }
-        else if(c.kind==='path') { const pa=structuredClone(c.value) as typeof p.paths[number];pa.id=pa.id+'-'+crypto.randomUUID().slice(0,4);pa.name+=' Copy';pa.points=pa.points.map(q=>({x:q.x+.5,y:q.y+.5}));p.addPath(pa);e.setSelection([pa.id]); }
-        else { const z=structuredClone(c.value) as typeof p.zones[number];z.id=z.id+'-'+crypto.randomUUID().slice(0,4);z.name+=' Copy';z.polygon=z.polygon.map(q=>({x:q.x+.5,y:q.y+.5}));p.addZone(z);e.setSelection([z.id]); }
+        if (c.kind==='object') { const o=structuredClone(c.value) as typeof p.objects[number]; o.id=o.id+'-'+createUuid().slice(0,4);o.name+=' Copy';o.x+=.5;o.y+=.5;p.addObject(o);e.setSelection([o.id]); }
+        else if(c.kind==='path') { const pa=structuredClone(c.value) as typeof p.paths[number];pa.id=pa.id+'-'+createUuid().slice(0,4);pa.name+=' Copy';pa.points=pa.points.map(q=>({x:q.x+.5,y:q.y+.5}));p.addPath(pa);e.setSelection([pa.id]); }
+        else { const z=structuredClone(c.value) as typeof p.zones[number];z.id=z.id+'-'+createUuid().slice(0,4);z.name+=' Copy';z.polygon=z.polygon.map(q=>({x:q.x+.5,y:q.y+.5}));p.addZone(z);e.setSelection([z.id]); }
       } else if (x.key === 'Enter') {
         if (e.tool === 'brush' && e.brushShape === 'polygon') void finishBrushPolygon();
         else if (e.tool === 'building' && e.buildingTool === 'floor') finishBuildingFloor();
@@ -249,17 +250,17 @@ export function MapCanvas() {
 
   const finishBuildingFloor = () => {
     if (!buildingDrawing || buildingDrawing.kind !== 'floor' || buildingDrawing.points.length < 3) return;
-    p.commit(); const id=`FLOOR-${crypto.randomUUID().slice(0,6)}`;
+    p.commit(); const id=`FLOOR-${createUuid().slice(0,6)}`;
     p.addFloor({id,name:id,polygon:buildingDrawing.points,enabled:true,textureName:'blue_linoleum_high_contrast',textureScale:1,textureRotation:0,ceilingTexture:'blue_linoleum_high_contrast',ceilingScale:1,indoor:true});
     e.setSelection([id]); setBuildingDrawing(null); e.setBuildingTool(null);
   };
 
   const addBuildingPoint = (w: Point) => {
     const kind=e.buildingTool; if (!kind) return;
-    if (kind==='model') { p.commit(); const id=`MODEL-${crypto.randomUUID().slice(0,6)}`; p.addModel({id,name:id,modelName:'OpenRobotics/OfficeChairBlack',x:w.x,y:w.y,yaw:0,z:0,static:true,dispensable:false,enabled:true}); e.setSelection([id]); e.setBuildingTool(null); return; }
+    if (kind==='model') { p.commit(); const id=`MODEL-${createUuid().slice(0,6)}`; p.addModel({id,name:id,modelName:'OpenRobotics/OfficeChairBlack',x:w.x,y:w.y,yaw:0,z:0,static:true,dispensable:false,enabled:true}); e.setSelection([id]); e.setBuildingTool(null); return; }
     const current=buildingDrawing?.kind===kind?buildingDrawing.points:[]; const points=[...current,w];
     if ((kind==='wall'||kind==='door'||kind==='measurement') && points.length===2) {
-      p.commit(); const id=`${kind.toUpperCase()}-${crypto.randomUUID().slice(0,6)}`;
+      p.commit(); const id=`${kind.toUpperCase()}-${createUuid().slice(0,6)}`;
       if(kind==='wall') p.addWall({id,name:id,start:points[0],end:points[1],enabled:true,alpha:1,textureName:'wall_white',textureScale:1,textureWidth:1,textureHeight:2.5});
       if(kind==='door') { p.addDoor({id,name:id,start:points[0],end:points[1],enabled:true,type:'hinged',motionAxis:'start',motionDegrees:90,motionDirection:1,plugin:'normal',rightLeftRatio:1}); setDoorAnchorWallId(null); }
       if(kind==='measurement') p.addMeasurement({id,name:id,start:points[0],end:points[1],distance:distance(points[0],points[1]),enabled:true});
@@ -293,7 +294,7 @@ export function MapCanvas() {
     if (e.placementObject) {
       p.commit();
       const prefix=e.placementObject==='waypoint'?'WP':e.placementObject.toUpperCase();
-      const id=`${prefix}-${crypto.randomUUID().slice(0,6)}`;
+      const id=`${prefix}-${createUuid().slice(0,6)}`;
       const objectMetadata =
         e.placementObject === 'pickup'
           ? { pickup_dispenser: id }
