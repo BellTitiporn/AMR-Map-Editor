@@ -1,12 +1,12 @@
 # AMR Map Editor
 
 **Engineering Guide & README**  
-Documentation update: 2026-09-16  
-Project version referenced by the existing guide: **v0.11.0**
+Documentation update: 2026-09-23  
+Current frontend package version: **v0.11.7**
 
 AMR Map Editor is a CAD/GIS-style web application for creating, editing, validating, and exporting navigation maps for Autonomous Mobile Robots (AMRs), ROS2, Fleet Manager, and Open-RMF / Traffic Editor workflows.
 
-> This README consolidates the original engineering guide and the latest implemented export / RMF features.
+> This README consolidates the engineering guide with the features currently implemented in the frontend, including Keepout Zone export, RMF nav graphs, RMF Bundle generation, and PostgreSQL-backed project revisions through the companion backend API.
 
 ---
 
@@ -16,11 +16,12 @@ AMR Map Editor is a CAD/GIS-style web application for creating, editing, validat
 - Edit occupancy raster with Freehand, Line, Rectangle, Polygon, and Eraser tools.
 - Create navigation objects: Waypoint, Home, Charging Station, Docking Station, Pickup, Drop-off, Waiting, and Parking.
 - Create Normal, Preferred, One-way, Bidirectional, and Restricted paths.
-- Create No-Go, Slow, Restricted, Parking, Loading, Unloading, Human Traffic, and Safety zones.
+- Create No-Go, **Keepout**, Slow, Restricted, Parking, Loading, Unloading, Human Traffic, and Safety zones.
 - Create RMF building geometry: Wall, Door, Floor Area, Model, and Measurement.
 - Configure robot footprint, safety margin, clearance, turning radius, and max speed.
 - Validate navigation geometry and topology.
-- Export ROS maps, navigation JSON, GeoJSON, RMF `.building.yaml`, RMF Bundle, and reference-coordinate YAML.
+- Export ROS maps, navigation JSON, GeoJSON, RMF `.building.yaml`, RMF nav graphs, RMF Bundle, Keepout masks, and reference-coordinate YAML.
+- Save `.amrmap` + RMF Bundle revisions to PostgreSQL through the configured backend API.
 
 ## 2. Quick Start
 
@@ -330,19 +331,53 @@ The compact `[x, y]` writer is used intentionally instead of generic block-array
 
 ## 11. RMF Bundle
 
-The RMF Bundle can include:
+The current RMF Bundle exporter creates a deployment ZIP with a fixed internal base name of `map`:
 
 ```text
-<name>.building.yaml
-<name>.png
-<name>-navigation.json
-<name>-reference-coordinates.yaml
-README.txt
+map.building.yaml
+map.png
+map.pgm
+map.yaml
+map_keepout.png
+map_keepout.yaml
+nav_graphs/
+  0.yaml
+  1.yaml        # when additional graph indices are used
+  ...
 ```
 
-If a valid reference Floor is not available, the bundle can still be exported without the reference-coordinate file.
+Requirements:
 
-`<name>-navigation.json` preserves robot pose / navigation data, including object `x`, `y`, `yaw`, and heading information used by Fleet Manager / Nav2 integrations.
+- A valid occupancy map image must be loaded.
+- Map width, height, and resolution must be valid.
+- At least one enabled path with 2 or more points must exist so a nav graph can be generated.
+
+The downloaded ZIP name uses the filename entered in the Export dialog, for example:
+
+```text
+WB220126_Floor3-rmf-bundle.zip
+```
+
+The files **inside** the ZIP still use the deployment names shown above (`map.*`, `map_keepout.*`, `nav_graphs/*`).
+
+### Keepout mask
+
+Only enabled zones whose type is `keepout` are painted into `map_keepout.png`. The mask uses:
+
+```text
+White = free
+Black = keepout / occupied
+```
+
+`map_keepout.yaml` references `map_keepout.png` and uses the current map resolution and ROS origin with `negate: 0` and `mode: trinary`.
+
+### RMF nav graphs
+
+Each enabled path is assigned to its configured graph index. The bundle exports one YAML file per graph index:
+
+```text
+nav_graphs/<graphIndex>.yaml
+```
 
 ## 12. Export Formats
 
@@ -360,7 +395,8 @@ If a valid reference Floor is not available, the bundle can still be exported wi
 | GeoJSON | Graph / coordinate exchange |
 | `.building.yaml` | Open-RMF / Traffic Editor |
 | Reference Coordinates YAML | RMF <-> robot coordinate correspondence |
-| RMF Bundle ZIP | RMF building + image + navigation + optional reference coordinates |
+| RMF Nav Graphs ZIP | `nav_graphs/<graphIndex>.yaml` files |
+| RMF Bundle ZIP | `map.building.yaml` + PNG + PGM + ROS YAML + Keepout mask + nav graphs |
 
 ## 13. Validation
 
@@ -375,7 +411,7 @@ Validation should be run before deployment / export.
 ### Paths
 
 - Obstacle intersection
-- No-Go intersection
+- No-Go / Keepout intersection
 - Narrow path vs robot footprint
 - Disconnected path
 - Zero-length segments
@@ -392,7 +428,9 @@ Validation should be run before deployment / export.
 
 Checks footprint + safety margin against map restrictions.
 
-## 14. Save / Open
+## 14. Save / Open / Database
+
+### Local project persistence
 
 Projects are saved locally through IndexedDB.
 
@@ -412,6 +450,28 @@ Project export:
 
 Use `.amrmap` to reopen the complete editable project state.
 
+### PostgreSQL project database
+
+The frontend also includes a **Project Database** dialog. It connects to the companion backend API configured by:
+
+```env
+VITE_API_BASE_URL=http://localhost:3001/api
+```
+
+Database actions currently supported by the UI:
+
+- Health-check the backend API.
+- Save the current project as a new database project.
+- Automatically generate and store both the current `.amrmap` and RMF Bundle.
+- Save a new revision of an existing project.
+- Load the latest `.amrmap` revision.
+- Download the latest RMF Bundle revision.
+- Delete a project and its revisions.
+
+The frontend expects PostgreSQL and the Node backend to be running separately. The backend is not contained in this frontend ZIP. The default UI troubleshooting message assumes the backend is on port `3001`.
+
+> When opening a GitHub Pages-hosted frontend, `localhost` points to the **viewer's own computer**, not the PC running your backend. Set `VITE_API_BASE_URL` to an API address that the browser can actually reach and ensure the backend allows the frontend origin.
+
 ## 15. Project Structure
 
 ```text
@@ -422,7 +482,9 @@ src/
 │   ├── inspector/
 │   │   └── Inspector.tsx
 │   ├── dialogs/
-│   │   └── ExportDialog.tsx
+│   │   ├── DatabaseDialog.tsx
+│   │   ├── ExportDialog.tsx
+│   │   └── ...
 │   └── ...
 ├── geometry/
 │   ├── pathTopology.ts
@@ -433,9 +495,13 @@ src/
 ├── models/
 │   └── index.ts
 ├── services/
+│   ├── database/
+│   │   └── databaseApi.ts
 │   ├── export/
 │   │   ├── buildingExporter.ts
 │   │   ├── geojsonExporter.ts
+│   │   ├── keepoutExporter.ts
+│   │   ├── navGraphExporter.ts
 │   │   ├── referenceCoordinatesExporter.ts
 │   │   ├── rmfBundleExporter.ts
 │   │   └── ...
@@ -469,10 +535,27 @@ src/
 - Uses the same four source points for RMF and robot coordinates.
 - Outputs compact `[x, y]` YAML.
 
+### `keepoutExporter.ts`
+
+- Generates `map_keepout.png` at the same pixel dimensions as the occupancy map.
+- Paints only enabled `keepout` polygons.
+- Generates the companion `map_keepout.yaml`.
+
+### `navGraphExporter.ts`
+
+- Collects graph indices from enabled paths.
+- Generates `nav_graphs/<graphIndex>.yaml`.
+
 ### `rmfBundleExporter.ts`
 
-- Packages RMF assets.
-- Adds reference-coordinate YAML when valid Floor geometry is available.
+- Packages `map.building.yaml`, occupancy PNG, PGM, ROS YAML, Keepout mask files, and nav graphs.
+- Requires at least one enabled path with at least two points.
+
+### `databaseApi.ts`
+
+- Uses `VITE_API_BASE_URL` (default `http://localhost:3001/api`).
+- Lists database projects and revisions.
+- Creates projects, uploads new revisions, downloads latest files, and deletes projects.
 
 ## 17. Troubleshooting
 
@@ -540,12 +623,47 @@ Pickup  -> pickup_dispenser
 Dropoff -> dropoff_ingestor
 ```
 
+
+### Keepout files missing or incorrect
+
+Verify:
+
+- The zone type is `keepout`, not only `no_go`.
+- The Keepout Zone is enabled.
+- The polygon has at least 3 points.
+- Map width, height, resolution, and origin are correct.
+
+Expected bundle files:
+
+```text
+map_keepout.png
+map_keepout.yaml
+```
+
+### RMF Bundle says nav graph is required
+
+Add or enable at least one navigation path containing 2 or more points. RMF Bundle generation intentionally fails when no nav graph can be produced.
+
+### Project Database shows Offline
+
+Check:
+
+- PostgreSQL is running on the backend machine.
+- The companion Node backend is running.
+- `VITE_API_BASE_URL` points to the reachable backend address.
+- Port `3001` (or your configured API port) is reachable through the firewall/network.
+- CORS on the backend allows the frontend origin.
+- For another PC on the same LAN, do not use `localhost`; use the backend PC's LAN IP/hostname.
+
 ## 18. Deployment Checklist
 
 - [ ] Correct map resolution.
 - [ ] Correct map origin and origin yaw.
 - [ ] Navigation objects are not inside obstacles.
 - [ ] Path junctions are truly connected.
+- [ ] Keepout Zones are enabled and correctly placed.
+- [ ] `map_keepout.png` / `map_keepout.yaml` are present in the RMF Bundle.
+- [ ] Required `nav_graphs/<index>.yaml` files are present.
 - [ ] One-way / bidirectional routing is correct.
 - [ ] Lane forward / backward orientation is correct.
 - [ ] Pickup dispenser names are correct.
@@ -562,4 +680,6 @@ Dropoff -> dropoff_ingestor
 - Travel direction and lane orientation are intentionally separate.
 - Reference coordinate values must come from the active map, not from hard-coded examples.
 - The four reference pairs correspond to the same four physical map corners in RMF and robot coordinates.
-- Traffic Editor, Fleet Manager, and robot-side systems may use different coordinate representations; keep the coordinate conversion centralized in the exporter.
+- Traffic Editor, Fleet Manager, Nav2, and robot-side systems may use different coordinate representations; keep coordinate conversion centralized in the exporters.
+- `No-Go` and `Keepout` both block path validation, but only `Keepout` zones are rasterized into the RMF Bundle keepout mask.
+- Database storage is revision-based and depends on the separately deployed backend API and PostgreSQL database.
