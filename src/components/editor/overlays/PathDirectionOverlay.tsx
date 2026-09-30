@@ -14,16 +14,18 @@ export function PathDirectionOverlay({
   showBadge: boolean;
 }) {
   const orientation = path.orientation ?? '';
-  const hasTravelDirection = path.type === 'one_way' || path.type === 'bidirectional';
+  const hasTravelDirection = path.type === 'one_way' || path.type === 'bidirectional'; // Only show arrows for one-way or bidirectional paths
   if (!hasTravelDirection && !orientation) return null;
 
+  // Determine the stroke color based on the path type
   const stroke = path.type === 'one_way'
     ? '#075985'
     : path.type === 'bidirectional'
       ? '#17643b'
       : '#475569';
 
-  const arrows = hasTravelDirection
+  // Generate arrows for the path segments based on the path type and orientation
+      const arrows = hasTravelDirection
     ? path.points.slice(0, -1).flatMap((q, i) => {
         const a = worldToPixel(q.x, q.y, metadata);
         const b = worldToPixel(path.points[i + 1].x, path.points[i + 1].y, metadata);

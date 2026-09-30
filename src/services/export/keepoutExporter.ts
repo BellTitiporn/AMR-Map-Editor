@@ -1,4 +1,3 @@
-import YAML from 'yaml';
 import type { MapMetadata, MapZone, Point2D } from '../../models';
 import { worldToPixel } from '../../map-engine/coordinates';
 
@@ -8,15 +7,14 @@ import { worldToPixel } from '../../map-engine/coordinates';
  * with negate=0 and trinary mode.
  */
 export function generateKeepoutYaml(metadata: MapMetadata, imageName = 'map_keepout.png') {
-  return YAML.stringify({
-    image: imageName,
-    mode: 'trinary',
-    resolution: metadata.resolution,
-    origin: [metadata.originX, metadata.originY, metadata.originYaw],
-    negate: 0,
-    occupied_thresh: 0.65,
-    free_thresh: 0.196,
-  });
+  return `image: ${imageName}
+mode: trinary
+resolution: ${metadata.resolution}
+origin: [${metadata.originX}, ${metadata.originY}, ${metadata.originYaw}]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196
+`;
 }
 
 function drawPolygon(ctx: CanvasRenderingContext2D, polygon: Point2D[], metadata: MapMetadata) {
